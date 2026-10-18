@@ -96,6 +96,7 @@ const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'));
 const AdminProducts = lazy(() => import('./pages/admin/AdminProducts'));
 const AdminConcerns = lazy(() => import('./pages/admin/AdminConcerns'));
 const AmazonFlipkartListing = lazy(() => import('./pages/admin/AmazonFlipkartListing'));
+const AfDashboardApp = lazy(() => import('./af/App'));
 const AdminNiches = lazy(() => import('./pages/admin/AdminNiches'));
 const AdminCategoriesHub = lazy(() => import('./pages/admin/AdminCategoriesHub'));
 const AdminMissingImages = lazy(() => import('./pages/admin/AdminMissingImages'));

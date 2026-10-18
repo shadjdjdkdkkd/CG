@@ -3519,6 +3519,22 @@ mp_ops_routes.setup(db, verify_admin_token, razorpay_client)
 app.include_router(mp_core_routes.router, prefix="/api")
 app.include_router(mp_ops_routes.router, prefix="/api")
 app.include_router(mp_catalog_routes.router, prefix="/api")
+
+# AutoFill AI — Amazon & Flipkart listing feature (cloned from dragon16t/chrome-extension,
+# mounted under /api/af on its own _afext database so it never collides with the store).
+try:
+    import af_feature
+    app.include_router(af_feature.af_api)
+    app.include_router(af_feature.af_auth_router)
+
+    @app.on_event("startup")
+    async def _af_seed_startup():
+        try:
+            await af_feature.seed_admin(af_feature.af_db)
+        except Exception as _afse:  # noqa: BLE001
+            logging.getLogger(__name__).error(f"AF seed failed: {_afse}")
+except Exception as _afe:  # noqa: BLE001
+    logging.getLogger(__name__).error(f"AF feature mount failed: {_afe}")
 from services import mp_common as _mp_common
 
 

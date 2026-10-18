@@ -1490,6 +1490,46 @@ async def consult_refund_request(booking_id: str, body: Dict[str, Any]):
     return {"success": True}
 
 
+@router.post("/home-bookings/{booking_id}/cancel-refund")
+async def home_cancel_refund(booking_id: str, body: Dict[str, Any]):
+    """No partner accepted a home-service booking: stop broadcasting and refund to the customer wallet."""
+    email = (body.get("email") or "").lower()
+    b = await Db.mp_home_bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b["customer"]["email"] != email:
+        raise HTTPException(404, "Booking not found")
+    if b["status"] in ("assigned", "in_service", "completed", "completion_pending"):
+        raise HTTPException(400, "A partner already accepted — request a refund from support instead.")
+    if b["status"] == "refunded":
+        return {"success": True, "already": True, "refunded": b.get("refunded_amount", 0)}
+    await Db.mp_booking_offers.update_many({"booking_id": booking_id}, {"$set": {"status": "expired"}})
+    refunded = 0.0
+    if b.get("payment_status") == "paid":
+        refunded = float(b.get("total_amount") or b.get("price") or 0)
+        await mp.wallet_move("customer", email, refunded, "credit",
+                             "Home service refund — no partner accepted", booking_id)
+    await Db.mp_home_bookings.update_one({"booking_id": booking_id}, {"$set": {
+        "status": "refunded", "refunded_amount": refunded, "refunded_to": "wallet", "updated_at": mp.now()}})
+    await mp.notify("customer", email, "Refunded to your wallet",
+                    f"₹{refunded} was added to your Celesta Glow wallet for {booking_id}.", "/my/bookings")
+    return {"success": True, "refunded": refunded}
+
+
+@router.post("/home-bookings/{booking_id}/refund-request")
+async def home_refund_request(booking_id: str, body: Dict[str, Any]):
+    """Customer asks the admin to review a refund for a home-service booking."""
+    email = (body.get("email") or "").lower()
+    b = await Db.mp_home_bookings.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b["customer"]["email"] != email:
+        raise HTTPException(404, "Booking not found")
+    if await Db.mp_refunds.find_one({"booking_id": booking_id, "status": "pending"}):
+        return {"success": True, "already": True}
+    await Db.mp_refunds.insert_one({"refund_id": mp.uid("rfd"), "booking_id": booking_id, "module": "home",
+        "customer_email": email, "customer_name": b["customer"]["name"],
+        "amount": float(b.get("total_amount") or b.get("price") or 0),
+        "reason": body.get("reason", ""), "status": "pending", "payment_status": b.get("payment_status"), "at": mp.now()})
+    return {"success": True}
+
+
 @router.post("/partner/photo")
 async def partner_upload_photo(file: UploadFile = File(...), authorization: str = Header(None)):
     p = await _partner(authorization)

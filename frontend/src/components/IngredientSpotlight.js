@@ -51,6 +51,33 @@ export default function IngredientSpotlight({ accent = '#0e7490', items = null, 
         accent: '#047857',
       }))
     : INGREDIENTS;
+
+  // On a product page (items provided) render a clean LINEAR list aligned to the
+  // column; on the homepage keep the 3-card grid.
+  if (usingProduct) {
+    return (
+      <section className="mt-6" data-testid="ingredient-spotlight">
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-[0.15em] mb-3 flex items-center gap-2">
+          <Leaf size={12} style={{ color: accent }} /> Ingredient Spotlight
+        </p>
+        <div className="rounded-2xl ring-1 ring-emerald-100 bg-white divide-y divide-emerald-50 overflow-hidden">
+          {cards.map((ing) => (
+            <div key={ing.id} data-testid={`ingredient-${ing.id}`} className="flex items-start gap-3 p-4">
+              <span className="mt-1 shrink-0 w-2.5 h-2.5 rounded-full" style={{ background: accent }} />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <h3 className="font-heading text-base font-black text-stone-900">{ing.name}</h3>
+                  <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: ing.accent || accent }}>{ing.tagline}</span>
+                </div>
+                <p className="text-sm text-stone-600 leading-relaxed mt-0.5">{ing.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        {subtitle && <p className="text-xs text-stone-400 mt-2">{subtitle}</p>}
+      </section>
+    );
+  }
   return (
     <section className="max-w-7xl mx-auto px-3 sm:px-6 py-8 sm:py-12" data-testid="ingredient-spotlight">
       <div className="flex items-end justify-between mb-4 sm:mb-6 px-1">
