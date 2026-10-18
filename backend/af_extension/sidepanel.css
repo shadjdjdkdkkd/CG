@@ -1,0 +1,58 @@
+* { box-sizing: border-box; }
+body { margin: 0; padding: 12px; background: #090D16; color: #F9FAFB; font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.brand { font-size: 16px; letter-spacing: -.01em; display: flex; align-items: center; gap: 8px; }
+.brand b { color: #10B981; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #6B7280; display: inline-block; }
+.dot.ok { background: #10B981; box-shadow: 0 0 8px #10B981; }
+.dot.bad { background: #EF4444; }
+.card { background: #111827; border: 1px solid #1F2937; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
+label { font-size: 10px; text-transform: uppercase; letter-spacing: .12em; color: #9CA3AF; font-weight: 600; }
+input, select, textarea { width: 100%; background: #0B1120; border: 1px solid #1F2937; color: #F9FAFB; border-radius: 6px; padding: 7px 9px; font: inherit; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #10B981; }
+button { background: #1F2937; color: #F9FAFB; border: 1px solid #374151; border-radius: 6px; padding: 7px 10px; cursor: pointer; font: inherit; font-weight: 600; transition: background-color .15s, border-color .15s; }
+button:hover { background: #374151; }
+button:disabled { opacity: .5; cursor: wait; }
+button.primary { background: #10B981; border-color: #10B981; color: #04140D; }
+button.primary:hover { background: #34D399; }
+button.big { padding: 12px; font-size: 14px; }
+button.ghost { background: transparent; }
+button.sm { padding: 4px 8px; font-size: 11px; white-space: nowrap; }
+.row { display: flex; gap: 6px; align-items: center; }
+.row > button.ghost:not(.sm) { flex: 1; }
+.between { justify-content: space-between; }
+.stack { display: flex; flex-direction: column; gap: 6px; }
+.hidden { display: none !important; }
+.muted { color: #9CA3AF; font-size: 11px; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 11px; }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: .1em; background: #1F2937; }
+.badge.amazon { background: rgba(245,158,11,.15); color: #F59E0B; }
+.badge.flipkart { background: rgba(37,99,235,.18); color: #60A5FA; }
+.check { display: flex; gap: 6px; align-items: center; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 400; color: #D1D5DB; }
+.check input { width: auto; }
+.status { font-size: 12px; min-height: 16px; color: #9CA3AF; }
+.status.ok { color: #10B981; } .status.err { color: #F87171; }
+.field { border: 1px solid #1F2937; border-radius: 6px; padding: 6px 8px; }
+.field .lbl { font-size: 11px; color: #9CA3AF; margin-bottom: 4px; }
+.field textarea { font-size: 12px; min-height: 30px; }
+.tab { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+.tab input { width: auto; }
+.badge.myntra { background: rgba(255,63,108,.15); color: #FF3F6C; }
+.badge.meesho { background: rgba(159,32,137,.2); color: #E879F9; }
+#recBadge { background: rgba(239,68,68,.15); color: #F87171; }
+#recSteps div { font-size: 11px; color: #D1D5DB; border-left: 2px solid #10B981; padding-left: 6px; }
+
+.bar { height: 6px; background: #1F2937; border-radius: 99px; overflow: hidden; }
+.bar > div { height: 100%; width: 0; background: #10B981; transition: width .4s ease; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 10px; padding: 2px 7px; border-radius: 99px; border: 1px solid #374151; color: #9CA3AF; }
+.chip.on { border-color: #10B981; color: #10B981; background: rgba(16,185,129,.08); }
+.ask { border: 1px solid #10B981; background: rgba(16,185,129,.08); border-radius: 8px; padding: 8px; font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+.badge.nykaa { background: rgba(252,39,121,.15); color: #FC2779; }
+.badge.instamart { background: rgba(252,128,25,.15); color: #FC8019; }
+.badge.jiomart { background: rgba(0,120,173,.18); color: #38BDF8; }
+.badge.ajio { background: rgba(148,163,184,.18); color: #CBD5E1; }
+.badge.blinkit { background: rgba(248,203,70,.18); color: #F8CB46; }
+.badge.zepto { background: rgba(124,58,237,.2); color: #A78BFA; }
+.badge.tata1mg { background: rgba(255,111,97,.18); color: #FF6F61; }

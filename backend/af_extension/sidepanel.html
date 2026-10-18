@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+<section id="loginCard" class="card hidden">
+  <label>Sign in</label>
+  <input id="loginUser" placeholder="Username" />
+  <input id="loginPass" type="password" placeholder="Password" />
+  <button id="loginBtn" class="primary">Sign in</button>
+  <button id="otpSend" class="ghost sm">Forgot / change password — email me a code</button>
+  <div id="otpBox" class="stack hidden">
+    <input id="otpCode" placeholder="6-digit code" maxlength="6" />
+    <input id="otpNew" type="password" placeholder="New password (min 8)" />
+    <button id="otpReset">Change password</button>
+  </div>
+  <div id="loginMsg" class="status"></div>
+</section>
+<div id="main">
+<header>
+  <div class="brand"><span class="dot" id="apiDot"></span> AutoFill <b>AI</b></div>
+  <div class="row"><button class="ghost sm" id="toggleSettings">Settings</button><button class="ghost sm" id="logoutBtn">Log out</button></div>
+</header>
+
+<section id="settings" class="card hidden">
+  <label>Dashboard API URL</label>
+  <input id="apiUrl" />
+  <button id="saveApi" class="sm">Save</button>
+</section>
+
+<section class="card">
+  <div class="row between"><label>Product</label><button class="ghost sm" id="toggleNew">+ New product</button></div>
+  <select id="productSelect"></select>
+  <div id="newProduct" class="hidden stack">
+    <input id="pName" placeholder="Product name" />
+    <div class="row"><input id="pBrand" placeholder="Brand name" /><button class="ghost sm" id="defBrand" title="Save as default">Set default</button></div>
+    <textarea id="pIngredients" rows="2" placeholder="Ingredients"></textarea>
+    <div class="row"><input id="pSize" placeholder="Bottle size (e.g. 200 ml)" /><button class="ghost sm" id="defSize" title="Save as default">Set default</button></div>
+    <input id="pPrice" placeholder="Price (INR)" />
+    <button id="saveProduct">Save product</button>
+  </div>
+</section>
+
+<section class="card">
+  <label>Product link</label>
+  <input id="linkInput" placeholder="Paste product page link (details + images are read from it)" />
+  <button id="linkBtn" class="primary">Import link &amp; Fill everything</button>
+  <button id="styleBtn" class="ghost" title="Search this marketplace for your product and copy the naming style of the top-ranked listings">Learn top-seller style</button>
+  <label class="check"><input type="checkbox" id="autoImages" checked /> Upload product images from the link automatically</label>
+  <label class="check"><input type="checkbox" id="imgButton" checked /> Page "Upload photo" button uploads all link photos (no file picker)</label>
+  <label class="check"><input type="checkbox" id="autoSubmit" /> Auto-click final Save / Submit</label>
+</section>
+
+<section class="card">
+  <div class="row between"><span id="platformBadge" class="badge">—</span><span id="formatStatus" class="muted">Checking page…</span></div>
+  <div id="pageUrl" class="mono muted ellipsis"></div>
+  <button id="fillBtn" class="primary big">AI Generate &amp; Fill</button>
+  <div class="row">
+    <button id="scanBtn" class="ghost">Scan fields</button>
+    <button id="refillBtn" class="ghost">Re-fill edited</button>
+    <button id="learnBtn" class="ghost" title="Save the values currently on the page as a style reference">Learn page</button>
+  </div>
+  <div class="row">
+    <button id="fixBtn" class="ghost" title="Read error messages on the page and let AI correct those fields">Fix errors</button>
+    <button id="diagBtn" class="ghost" title="Send this page's structure to the dashboard for debugging">Diagnose page</button>
+  </div>
+  <label class="check"><input type="checkbox" id="regen" /> Regenerate (ignore saved answers)</label>
+  <label class="check"><input type="checkbox" id="autoMode" /> Auto-fill pages with a saved format</label>
+  <label class="check"><input type="checkbox" id="autoStep" /> Auto-detect new form steps &amp; fill them</label>
+  <div id="status" class="status"></div>
+</section>
+
+<section class="card">
+  <div class="row between"><label>Autopilot</label><span id="recBadge" class="badge hidden">● LEARNING</span></div>
+  <div class="muted">Learns by itself: list one product manually on Amazon / Flipkart / Myntra / Meesho as usual. Every click, section, field and dropdown is saved in the background when you press Save / Submit. Then "Fill everything" repeats it for any product.</div>
+  <label class="check"><input type="checkbox" id="autoLearn" checked /> Learn automatically in background</label>
+  <div id="learnBox" class="stack hidden" data-testid="learn-box">
+    <div class="row between"><span class="muted" id="learnLabel">Learning progress</span><span id="learnPct" class="mono">0%</span></div>
+    <div class="bar"><div id="learnBar"></div></div>
+    <div id="learnSteps" class="chips"></div>
+    <div id="learnSummary" class="muted"></div>
+    <div id="learnAsk" class="ask hidden">Learning complete on <b id="learnPlat"></b>. Turn on full auto-fill for this platform?
+      <div class="row"><button id="learnYes" class="primary sm">Turn on auto-fill</button><button id="learnNo" class="ghost sm">Not now</button></div>
+    </div>
+    <button id="learnOff" class="ghost sm hidden">Turn off auto-fill for this platform</button>
+  </div>
+  <div class="row hidden">
+    <button id="recBtn" class="ghost">Start learning</button>
+    <button id="recSave" class="ghost" disabled>Save learned flow</button>
+  </div>
+  <div id="recSteps" class="stack mono"></div>
+  <select id="recSelect"></select>
+  <label class="check"><input type="checkbox" id="allProducts" /> Run for every product (restarts at recorded start page)</label>
+  <div class="row"><button id="runBtn" class="primary">Fill everything</button><button id="stopBtn" class="ghost">Stop</button><button id="recDel" class="ghost sm">Delete</button></div>
+</section>
+
+<section class="card">
+  <div class="row between"><label>Fill multiple pages</label><button class="ghost sm" id="loadTabs">Refresh tabs</button></div>
+  <div id="tabList" class="stack"></div>
+  <button id="batchBtn" class="primary">Fill selected pages</button>
+</section>
+
+<section class="card">
+  <label>Detected fields <span id="fieldCount" class="muted"></span></label>
+  <div id="fieldList" class="stack"></div>
+</section>
+
+</div>
+<script src="config.js"></script>
+<script src="engine.js"></script>
+<script src="sidepanel.js"></script>
+</body>
+</html>

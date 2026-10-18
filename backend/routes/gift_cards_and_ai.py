@@ -126,6 +126,34 @@ Return STRICT JSON only (no markdown fences), exactly these keys:
     return {"platform": platform, "product": {"slug": slug, "name": prod.get("name")}, "listing": data}
 
 
+@router.get("/admin/listing/extension-zip")
+async def download_autofill_extension(
+    api_url: str = "",
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Package & download the AutoFill AI Amazon/Flipkart Chrome extension (MV3), with the
+    backend URL injected into config.js so it talks to this server."""
+    _auth(x_admin_token, admin_session)
+    import os as _os, zipfile as _zip, tempfile as _tmp
+    from fastapi.responses import FileResponse
+    src = "/app/backend/af_extension"
+    if not _os.path.isdir(src):
+        raise HTTPException(status_code=404, detail="Extension package not found on server")
+    base = (api_url or "").rstrip("/") or "https://your-backend/api"
+    out = _os.path.join(_tmp.mkdtemp(), "autofill-amazon-flipkart-extension.zip")
+    with _zip.ZipFile(out, "w", _zip.ZIP_DEFLATED) as z:
+        for root, _dirs, files in _os.walk(src):
+            for f in files:
+                fp = _os.path.join(root, f)
+                arc = _os.path.relpath(fp, src)
+                if f == "config.js":
+                    z.writestr(arc, open(fp).read().replace("__API_URL__", base))
+                else:
+                    z.write(fp, arc)
+    return FileResponse(out, media_type="application/zip", filename="autofill-amazon-flipkart-extension.zip")
+
+
 @router.get("/admin/gift-cards")
 async def list_gift_cards(
     page: int = 1, limit: int = 50,

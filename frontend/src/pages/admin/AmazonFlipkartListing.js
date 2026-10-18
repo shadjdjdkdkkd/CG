@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ShoppingBag, Sparkles, Copy, Loader2, Check } from 'lucide-react';
+import { ShoppingBag, Sparkles, Copy, Loader2, Check, Download } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 const adminToken = () => sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken') || '';
@@ -47,6 +47,19 @@ export default function AmazonFlipkartListing() {
     finally { setBusy(false); }
   };
 
+  const downloadExtension = async () => {
+    try {
+      const r = await axios.get(`${API}/api/admin/listing/extension-zip`, {
+        ...hdr(), params: { api_url: `${API}/api` }, responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([r.data]));
+      const a = document.createElement('a');
+      a.href = url; a.download = 'autofill-amazon-flipkart-extension.zip';
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      toast.success('Extension downloaded — unzip & load it in Chrome › Extensions › Load unpacked');
+    } catch (e) { toast.error('Download failed'); }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8" data-testid="amazon-flipkart-listing">
       <div className="flex items-center gap-2.5 mb-1">
@@ -75,6 +88,13 @@ export default function AmazonFlipkartListing() {
           className="mt-4 w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-extrabold rounded-full py-3.5 text-sm inline-flex items-center justify-center gap-2">
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} Generate {platform === 'amazon' ? 'Amazon' : 'Flipkart'} listing
         </button>
+        <div className="mt-3 pt-3 border-t border-stone-100">
+          <p className="text-[11px] text-stone-500 mb-2">Auto-fill listings directly on Amazon &amp; Flipkart seller pages with the Chrome extension.</p>
+          <button onClick={downloadExtension} data-testid="download-extension"
+            className="w-full border border-stone-300 hover:bg-stone-50 text-stone-800 font-bold rounded-full py-2.5 text-sm inline-flex items-center justify-center gap-2">
+            <Download size={15} /> Download Chrome Extension (.zip)
+          </button>
+        </div>
       </div>
 
       {result && (
