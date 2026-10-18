@@ -35,7 +35,13 @@ export default function AgoraCall({ room, onEnd }) {
         setState('live');
       } catch (e) {
         setState('error');
-        toast.error(e?.message?.includes('Permission') ? 'Allow camera & microphone to join' : 'Could not connect the video call');
+        // Surface the precise Agora failure so the real root cause is visible in logs.
+        console.error('[AgoraCall] join/publish failed', { code: e?.code, name: e?.name, message: e?.message, e });
+        const code = e?.code || '';
+        let msg = 'Could not connect the video call';
+        if (e?.message?.includes('Permission') || e?.name === 'NotAllowedError') msg = 'Allow camera & microphone to join';
+        else if (code === 'CAN_NOT_GET_GATEWAY_SERVER' || /token|dynamic key|invalid vendor/i.test(e?.message || '')) msg = 'Video service rejected the token — please tell support (code: ' + (code || 'token') + ')';
+        toast.error(msg);
       }
     })();
     return () => {
