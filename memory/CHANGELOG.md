@@ -1,59 +1,41 @@
-# Changelog
+# Changelog — Celesta Glow marketplace
 
-## 2026-10-13 — Re-clone celare-1.4 + Marketplace Phase 1
-Re-cloned github.com/dragon16t/celare-1.4 into /app (replacing celesta-only codebase).
-Verified homepage/doctors/services/admin match reference celare-preview-2.
+## 2026 — Re-clone celare-1.4 + marketplace overhaul
+Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-preview-2.
 
 ### Integrations
-- Agora RTC video keys wired: AGORA_APP_ID + AGORA_APP_CERTIFICATE (backend/.env),
-  REACT_APP_AGORA_APP_ID (frontend/.env). agora_service.py reads them; backend boots clean.
-- SendGrid key user-supplied was TRUNCATED → not set; email stays on live Gmail SMTP.
+- Agora RTC video keys wired (AGORA_APP_ID + AGORA_APP_CERTIFICATE; REACT_APP_AGORA_APP_ID).
+  AgoraCall uses app_id+token from the backend room endpoint. Video media itself needs a live
+  2-party test (camera) — not scriptable here.
+- SendGrid key user sent was truncated → email stays on live Gmail SMTP.
 
-### Marketplace changes (verified via testing_agent iteration_7, backend+frontend 100%)
-- Copy: homepage cards → "Book a Nearby Dermatologist" + "Glow Without Leaving Home";
-  /services heading → "Salon at your doorstep".
-- Rich empty states on /doctors and /services: "We're not available at your location yet" card.
-- ServiceDetail gender picker relabeled "Select your gender"; female-with-no-staff →
-  "No nearby female staff near you right now."
-- Wallet logic (services/mp_common.wallet_move gains allow_negative; mp_ops._settle):
-  pay-after-service (cash) bookings now DEBIT the platform commission from the provider
-  wallet (shows as minus, nets against online earnings); online bookings credit the wallet.
-- Withdrawal rules (mp_ops._guard_withdraw, doctor + partner): min ₹100, ≤ balance, max 2/day.
-- NEW admin "Withdrawals" tab in BOTH Dermatologist Manager (/admin/dermatologists) and
-  Service Partner Manager (/admin/partners) → components/admin/MpWithdrawals.js. Approve
-  (mark paid + reference) / Reject (refunds wallet). Backend /admin/withdrawals gains
-  owner_type filter + owner_name/owner_balance enrichment.
-- FIXED support-ticket runtime crash (AdminSupport.js useEffect(load,…) returned a Promise →
-  "destroy is not a function"). Swept the same anti-pattern; fixed MpCategories.js too.
-- Dermatologist photos: 3 seeded doctors given gender-matched professional portraits.
+### Phases 1–4 (tested — iteration_7)
+- Copy/titles, rich "not available at location" empty states, gender picker + badges,
+  wallet cash-commission-as-negative, withdrawal rules (min ₹100 / ≤balance / 2/day),
+  admin Withdrawals tabs (both hubs), support-ticket runtime crash fix, dermatologist photos,
+  non-stop partner alarm, removed double cash step, rebook, service location gating,
+  All Dermatologists admin section (edit-all + soft remove), consolidated Service Partner
+  Manager to ONE "Service Catalog & Content" tab (removed 3 duplicate tabs; absorbed
+  per-service image + description; Women/Men gender filter).
 
-### Marketplace Phase 2 (same session, code-reviewed; provider/customer flows need live-OTP testing)
-- Partner portal: NEW-booking alert now loops a beep every 2s (non-stop) until the partner
-  accepts/declines or the request expires (requests list empties). (PartnerPortalPage.js)
-- Removed the double cash step: the separate "Cash collected" button is gone; a cash
-  (pay-after-service) booking is auto-marked paid_cash when the partner verifies the customer
-  completion OTP (mp_ops.partner_verify). UI shows a "collect ₹X cash" note instead.
-- My Bookings: "Book again" button on consultations → /doctors/{doctor_id} to rebook new timings.
-- Services: per-card gender badge "For Women" / "For Men" (ServicesPage.js).
-- Verified already-present: partner "Navigate" → Google Maps dir link (customer lat/lng),
-  prescription PDF download (My Bookings), merchant earnings/balance (WalletPanel),
-  green "Paid" badge (TransactionsPanel).
+### Phase 5 — doctor instant-consult flow (tested — iteration_8, backend 13/13 pass)
+- GET /consultations/online-doctors: rate card of dermatologists online now (name/title/photo/fee).
+- InstantConsultModal rebuilt: SELECT online doctor (rate card) → form → pay → ring → ready;
+  on no-answer, "Refund to my wallet" or "Keep waiting". Modal now renders regardless of the
+  location gate on /doctors (bug fix — previously hidden until location granted).
+- DoctorInstantRequests: ring loops every 2s until the doctor accepts/declines (was single beep).
+- Refunds: POST /consultations/{id}/cancel-refund (no doctor → refund fee to customer wallet),
+  POST /consultations/{id}/refund-request (→ admin), GET/POST /admin/refunds (+process → credits
+  customer wallet). NEW admin "Refunds" tab in both hubs. Verified e2e via seeded paid booking.
+- Prescription IMAGE: POST /doctor/bookings/{id}/prescription/image (doctor upload),
+  GET /consultations/{id}/prescription (customer fetch incl images); upload button in consult room.
+  Existing PDF download already works for the user.
 
-### Remaining backlog (requested, not yet built) — Phase 3 (larger admin UI)
-- (none outstanding from the original spec — see Phase 3 below)
-
-### Marketplace Phase 3 (same session — admin UI; NOT run through testing agent per user instruction)
-- HbCatalogManager: "Add catalog" button (placeholder hints Men / Women / Healthy Beauty) +
-  a Manage-for gender filter (All / Women / Men / Unisex) so admins manage each gender's
-  services/images separately in the one unified catalog page. Category/subcategory/service
-  add-edit-update-delete + image replace already existed.
-- MpContentManager (Dermatologist Manager → Services & Content): first section relabeled
-  "Complete dermatologist profiles" (edit headline/specialties/bio/photo); the concern tiles
-  section relabeled "Homepage concern tiles (discovery categories)" with a note clarifying
-  they are NOT doctor profiles — fixes the user's "concerns wrongly under dermatology profile".
-- Partner order "Navigate" link now always present → Google Maps directions (customer lat/lng
-  when synced, else a maps search on the address).
-
-### Notes / not code-changed
-- "Super fast": clone already ships lazy routes + Cloudinary image optimizer + CDN sizing.
-- km-limit: /doctors and /services already filter providers by saved location (lat/lng) server-side.
+### Remaining from latest bug report (NOT yet done) — Phase 6
+- Live 2-party video-media test (confirm Agora joins; currently keys set + token issued).
+- Service-PARTNER booking parity: same ring/refund flow for home bookings (consult done; home
+  partly — admin refund supports module=home, but no customer cancel-refund-to-wallet for home yet).
+- Shop by concern/category: auto-map new products to matching section; show the SAME homepage
+  product card (one variation) on concern/category pages instead of 24 variations.
+- Product page "Ingredients Spotlight": make layout linear/perfect.
+- Instant booking payment ledger surfacing + recall polish (rejoin + rebook already exist).

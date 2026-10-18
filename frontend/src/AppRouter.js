@@ -95,6 +95,7 @@ const AdminEmployees = lazy(() => import('./pages/admin/AdminEmployees'));
 const AdminCustomers = lazy(() => import('./pages/admin/AdminCustomers'));
 const AdminProducts = lazy(() => import('./pages/admin/AdminProducts'));
 const AdminConcerns = lazy(() => import('./pages/admin/AdminConcerns'));
+const AmazonFlipkartListing = lazy(() => import('./pages/admin/AmazonFlipkartListing'));
 const AdminNiches = lazy(() => import('./pages/admin/AdminNiches'));
 const AdminCategoriesHub = lazy(() => import('./pages/admin/AdminCategoriesHub'));
 const AdminMissingImages = lazy(() => import('./pages/admin/AdminMissingImages'));
@@ -241,6 +242,7 @@ function App() {
         <Route path="/admin/customers" element={<AdminLayout><AdminCustomers /></AdminLayout>} />
         <Route path="/admin/products" element={<AdminLayout><AdminProducts /></AdminLayout>} />
         <Route path="/admin/concerns" element={<AdminLayout><AdminConcerns /></AdminLayout>} />
+        <Route path="/admin/amazon-flipkart" element={<AdminLayout><AmazonFlipkartListing /></AdminLayout>} />
         <Route path="/admin/categories" element={<AdminLayout><AdminConcerns /></AdminLayout>} />
         <Route path="/admin/niches" element={<AdminLayout><AdminNiches /></AdminLayout>} />
         <Route path="/admin/categories-hub" element={<AdminLayout><AdminCategoriesHub /></AdminLayout>} />

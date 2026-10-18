@@ -158,7 +158,7 @@ async def get_concern_with_products(
     if not concern:
         raise HTTPException(status_code=404, detail="Concern not found")
 
-    query = {"is_active": True, "concerns": slug}
+    query = {"is_active": True, "concerns": slug, "is_variation": {"$ne": True}}
     if search and search.strip():
         import re as _re
         safe = _re.escape(search.strip())
@@ -340,6 +340,7 @@ async def get_category_with_products(
     # category=face-makeup + subcategory=concealer.
     query = {
         "is_active": True,
+        "is_variation": {"$ne": True},
         "$or": [{"category": slug}, {"subcategory": slug}],
     }
     if search and search.strip():
@@ -349,6 +350,7 @@ async def get_category_with_products(
         # alongside the search-OR filter.
         query = {
             "is_active": True,
+            "is_variation": {"$ne": True},
             "$and": [
                 {"$or": [{"category": slug}, {"subcategory": slug}]},
                 {"$or": [

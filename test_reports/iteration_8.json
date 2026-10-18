@@ -1,0 +1,39 @@
+{
+  "summary": "Verified Celesta Glow Jan-2026 doctor consultation + refunds changes. Backend: 13/13 pytest cases pass (shape tests for online-doctors, services location gating, admin refund auth, consult-room no-500, and FULL E2E refund-to-wallet with Mongo-seeded paid consultation). Both /api/mp/consultations/{bid}/cancel-refund and /api/mp/consultations/{bid}/refund-request + /api/mp/admin/refunds + /api/mp/admin/refunds/{id}/process end-to-end verified to credit mp_wallet_ledger (customer owner_type) and mark booking as refunded. Frontend admin UI: /admin/dermatologists dhub-all-doctors (3 edit buttons + 3 remove buttons, derm-edit-modal opens), dhub-refunds (admin-refunds), dhub-support (admin-support) all render with ZERO runtime errors. /admin/partners phub-hb consolidated tab renders hb-catalog-manager with hb-adm-add-cat, hb-gf-women, hb-gf-men, phub-refunds renders admin-refunds. Old duplicate tabs (Services & Content / Service Catalogue / Categories & Images) are confirmed REMOVED. User UI: /services correctly gates on location — shows LocationGate (data-testid 'location-gate' with 'enable-location-btn' + 'search-location-btn') and heading 'Salon at your doorstep' when no location is set. Services location proximity filter works (lat/lng=1 returns 0 services).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Instant consult modal entry point", "issue": "Could NOT locate the 'Instant Consult' CTA (data-testid instant-cta or similar) on /doctors or /doctors/{id} pages. Doctor profile page only exposes scheduled slot booking (Pick your slot / Mon-Sat date tabs + Your details form). The instant-modal testids (instant-modal, instant-select, instant-form, instant-submit, instant-none-online) could not be verified because the trigger button is not visible from the doctor flow entry points we tried (/doctors and /doctors/{id}). Backend endpoint /api/mp/consultations/online-doctors itself works and returns {doctors:[], count:0}. Main agent should confirm whether the Instant CTA lives on the home page or Doctor Consult landing (nav shows 'Doctor Consult ₹999' link).", "affected_selectors": ["[data-testid='instant-modal']", "[data-testid='instant-select']", "[data-testid='instant-submit']"]}
+    ],
+    "design_issues": [
+      {"screen": "/services LocationGate", "issues": ["Task spec referenced data-testid 'share-location' but the actual testid used is 'location-gate' (container) with button testids 'enable-location-btn' and 'search-location-btn'. Functionality is correct — just a naming mismatch between the request spec and implementation. Consider aligning testid naming or updating docs."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_marketplace_jan2026_refunds.py",
+    "/app/backend/tests/test_consultation_refund_e2e_jan2026.py",
+    "/app/test_reports/pytest/jan2026_refunds.xml"
+  ],
+  "action_items": [
+    "Clarify / expose the Instant Consult CTA on doctor-facing pages so users can reach data-testid=instant-modal. Likely the trigger is on the home 'Glow Without Leaving Home' section or the Doctor Consult landing — ensure a data-testid like 'instant-cta' exists on each entry point for automated tests.",
+    "Optional: align LocationGate testid naming — spec called it 'share-location' but implementation uses 'location-gate' + 'enable-location-btn' + 'search-location-btn'."
+  ],
+  "critical_code_review_comments": [
+    "Good: /api/mp/consultations/{bid}/cancel-refund correctly guards against double-refund via status check and only moves wallet amount when payment_status=='paid'. Idempotent on 'refunded' status.",
+    "Good: /api/mp/admin/refunds/{id}/process defaults action='refunded' and to='wallet'; cleanly updates both mp_refunds and the booking collection (mp_consultations OR mp_home_bookings based on module).",
+    "mp_core.py /admin/refunds lacks a module filter query param — if partner-side refunds grow, admins will see mixed consult+home rows (current UI filters client-side which is fine for low volume).",
+    "mp_ops.py admin_process_refund uses body.get('to','wallet') default — safe. No validation that action is in {refunded,rejected}, so an unknown action silently maps to 'rejected' via the ternary. Low risk, but consider explicit validation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_marketplace_jan2026_refunds.py (new)",
+    "/app/backend/tests/test_consultation_refund_e2e_jan2026.py (new, seeds + cleans mp_consultations + mp_wallet_ledger + mp_refunds)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "~90% (all admin tabs + services location gating OK; only instant-modal CTA not found from doctor pages)"},
+  "test_credentials": "Admin password: celestaglow2024 at /admin",
+  "seed_data_creation": "Two mp_consultations docs seeded in E2E test (CG-C-TEST-*). Both auto-cleaned via test fixtures (also wipe mp_wallet_ledger + mp_refunds for the test customer email).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression lives in /app/backend/tests/test_marketplace_jan2026_refunds.py (shape+auth) and test_consultation_refund_e2e_jan2026.py (full refund-to-wallet via direct Mongo seed). Always run with REACT_APP_BACKEND_URL + MONGO_URL + DB_NAME env from backend/.env + frontend/.env sourced. Prior iteration 7 regression at test_marketplace_admin.py still green. Admin UI: /admin/dermatologists has tabs dhub-all-doctors, dhub-refunds, dhub-support, dhub-withdrawals; /admin/partners has phub-hb (consolidated), phub-refunds, phub-support, phub-withdrawals. 3 seeded doctors (Meera, Arjun, Sana) accessible via /api/mp/doctors — all currently offline so online-doctors returns count:0. LocationGate on /services uses data-testid 'location-gate' + 'enable-location-btn' / 'search-location-btn' (NOT 'share-location').",
+  "rca_of_the_issue": "No critical bugs found this iteration. Only observation: Instant-modal entry point could not be exercised through doctor pages. Likely trigger lives elsewhere; the modal component (InstantConsultModal.js) and its testids exist in code but weren't rendered on /doctors or /doctors/{id}. Not a regression — just not covered by this test pass."
+}

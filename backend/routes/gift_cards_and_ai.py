@@ -68,6 +68,64 @@ class GiftCardUpdate(BaseModel):
     remaining_balance: Optional[float] = None
 
 
+@router.post("/admin/listing/generate")
+async def generate_marketplace_listing(
+    body: dict = Body(...),
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """AI-generate an Amazon / Flipkart listing (title, bullets, description, search terms) for a product."""
+    _auth(x_admin_token, admin_session)
+    import os as _os, re as _re, json as _json, uuid as _uuid
+    from emergentintegrations.llm.chat import UserMessage
+    slug = body.get("product_slug") or body.get("slug")
+    platform = (body.get("platform") or "amazon").lower()
+    prod = await _db.products.find_one({"slug": slug}, {"_id": 0}) if slug else None
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    api_key = _os.environ.get("GEMINI_API_KEY") or _os.environ.get("EMERGENT_LLM_KEY", "")
+    keys = [k for k in [_os.environ.get("GEMINI_API_KEY"), _os.environ.get("LISTING_AI_KEY")] if k]
+    if not keys:
+        raise HTTPException(status_code=503, detail="No AI key configured (set GEMINI_API_KEY)")
+    lim = {"amazon": (200, 5), "flipkart": (150, 6)}.get(platform, (200, 5))
+    prompt = f"""Create a high-converting {platform.title()} India marketplace listing for this beauty product.
+Brand: {prod.get('brand', 'Celesta Glow')}
+Name: {prod.get('name', '')}
+Type: {prod.get('subcategory') or prod.get('category', '')}
+Key ingredients: {prod.get('key_ingredients', '')}
+Size: {prod.get('size', '')}
+Price: INR {prod.get('prepaid_price') or prod.get('mrp', '')}
+Concerns: {', '.join(prod.get('concerns', []) or [])}
+
+Return STRICT JSON only (no markdown fences), exactly these keys:
+{{
+  "title": "SEO title <= {lim[0]} chars, includes brand + key benefit + size",
+  "bullets": ["{lim[1]} benefit bullet points, each <= 200 chars, start with a capitalised feature"],
+  "description": "180-300 word A+ style product description with paragraphs",
+  "search_terms": ["8-12 backend search keywords, no repetition of the title"],
+  "category_suggestion": "best marketplace category path"
+}}"""
+    # Try the store's Gemini key first; fall back to the free universal key if it errors/exhausts.
+    resp, last_err = None, None
+    for key in keys:
+        try:
+            chat = GeminiChat(api_key=key, session_id=f"listing-{_uuid.uuid4().hex[:8]}",
+                              system_message=f"You are an expert {platform.title()} India listing copywriter.").with_model("gemini", "gemini-2.5-flash")
+            resp = await chat.send_message(UserMessage(text=prompt))
+            if resp:
+                break
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            continue
+    if not resp:
+        raise HTTPException(status_code=503, detail=f"AI unavailable right now: {last_err}")
+    m = _re.search(r"\{[\s\S]*\}", resp or "")
+    if not m:
+        raise HTTPException(status_code=502, detail="AI returned no listing — try again")
+    data = _json.loads(m.group())
+    return {"platform": platform, "product": {"slug": slug, "name": prod.get("name")}, "listing": data}
+
+
 @router.get("/admin/gift-cards")
 async def list_gift_cards(
     page: int = 1, limit: int = 50,

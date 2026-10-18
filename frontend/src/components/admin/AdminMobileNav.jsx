@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { to: '/admin/offers', label: 'Offers & Sale', icon: Percent, color: 'rose' },
   { to: '/admin/products', label: 'Products', icon: Package, color: 'green' },
   { to: '/admin/bulk-import', label: 'Bulk Import (Excel)', icon: Upload, color: 'indigo' },
+  { to: '/admin/amazon-flipkart', label: 'Amazon & Flipkart Listing', icon: Package, color: 'amber', featured: true },
   { to: '/admin/master-tools', label: 'Master Tools', icon: Sparkles, color: 'emerald' },
   { to: '/admin/media-tools', label: 'Media, SEO & Splash', icon: Shield, color: 'purple' },
   { to: '/admin/reels', label: 'Influencer Reels', icon: Sparkles, color: 'rose' },

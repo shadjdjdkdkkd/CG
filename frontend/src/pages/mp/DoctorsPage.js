@@ -117,13 +117,13 @@ const DoctorsPage = () => {
           <h1 className="text-3xl sm:text-5xl font-extrabold text-stone-900 mt-2">Ask a Dermatologist</h1>
         </div>
         <div className="mb-7" data-testid="goldbar-under-heading"><GoldBar onlineCount={onlineCount} onClick={() => setShowInstant(true)} /></div>
+        {showInstant && <InstantConsultModal onClose={() => setShowInstant(false)} />}
 
         {!loc ? (
           <LocationGate title="Find dermatologists around you" subtitle="See who is live near you right now." />
         ) : (
           <>
             <CircleCategories module="doctor" active={cat} onSelect={setCat} />
-            {showInstant && <InstantConsultModal onClose={() => setShowInstant(false)} />}
 
             <div className="mt-8 grid grid-cols-3 gap-2 sm:gap-5" data-testid="doctor-list">
               {loading && <p className="col-span-full text-center text-stone-400 py-16">Finding dermatologists near you…</p>}

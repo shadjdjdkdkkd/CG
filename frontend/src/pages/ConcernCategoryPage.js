@@ -636,22 +636,8 @@ export function ProductCard({ product, compact = false, priority = false }) {
           </div>
         )}
 
-        {/* Dermatologist test-report badge — shown whenever admin has uploaded
-            a report via /admin/media-tools. Links to the report image so
-            skeptical shoppers can inspect the certificate. */}
-        {(product.is_dermat_tested || product.test_report_image) && (
-          <a
-            href={product.test_report_image || '#'}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => { if (!product.test_report_image) e.preventDefault(); }}
-            className="mt-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold text-center py-1 rounded-md flex items-center justify-center gap-1 tracking-wide hover:bg-emerald-100 transition-colors"
-            data-testid={`dermat-badge-${product.slug}`}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
-            Dermatologist Tested{product.test_report_lab ? ` · ${product.test_report_lab}` : ''}
-          </a>
-        )}
+        {/* Dermatologist test-report badge removed on listing cards (Jan 2026) so
+            concern/category cards match the clean homepage card exactly. */}
 
         {/* BRAND EYEBROW (per-niche, with product.brand override) */}
         <p className="text-[9px] sm:text-[10px] font-black tracking-[0.22em] uppercase text-green-700 mb-0.5 mt-2 leading-none h-3">{getProductBrand(product)}</p>
