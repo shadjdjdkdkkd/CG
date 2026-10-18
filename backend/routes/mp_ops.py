@@ -695,6 +695,54 @@ async def finalize_prescription(booking_id: str, authorization: str = Header(Non
     return {"success": True, "status": "final"}
 
 
+@router.post("/doctor/bookings/{booking_id}/prescription/image")
+async def upload_prescription_image(booking_id: str, file: UploadFile = File(...), authorization: str = Header(None)):
+    """Doctor uploads a photo/scan of a handwritten or printed prescription."""
+    d = await _doctor(authorization)
+    b = await Db.mp_consultations.find_one({"booking_id": booking_id, "doctor_id": d["doctor_id"]}, {"_id": 0})
+    if not b:
+        raise HTTPException(404, "Booking not found")
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(400, "Image must be under 10MB")
+    if (file.content_type or "") not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(400, "Only JPG, PNG or WebP images are allowed")
+    ext = (file.filename or "rx.jpg").rsplit(".", 1)[-1].lower()
+    url = await mp.store_image(data, f"rx-{booking_id}-{secrets.token_hex(3)}", ext)
+    rx = await Db.mp_prescriptions.find_one({"booking_id": booking_id, "status": {"$ne": "superseded"}})
+    if rx:
+        await Db.mp_prescriptions.update_one({"_id": rx["_id"]}, {"$push": {"images": url},
+                                             "$set": {"updated_at": mp.now(), "status": "final", "finalized_at": mp.now()}})
+        pid = rx["prescription_id"]
+    else:
+        pid = mp.uid("rx")
+        await Db.mp_prescriptions.insert_one({"prescription_id": pid, "booking_id": booking_id, "doctor_id": d["doctor_id"],
+            "doctor_name": d["personal"]["name"], "registration_number": d["professional"].get("registration_number"),
+            "customer_email": b["customer"]["email"], "patient_name": b["customer"]["name"], "date": b["date"],
+            "images": [url], "medicines": [], "advice": "", "diagnosis": "", "version": 1, "status": "final",
+            "finalized_at": mp.now(), "history": [], "created_at": mp.now(), "updated_at": mp.now()})
+    await mp.notify("customer", b["customer"]["email"], "Prescription uploaded",
+                    "Your doctor uploaded a prescription. Download it from My Bookings.", "/my/bookings")
+    return {"success": True, "url": url, "prescription_id": pid}
+
+
+@router.get("/consultations/{booking_id}/prescription")
+async def customer_prescription(booking_id: str, email: str = "", authorization: str = Header(None)):
+    """Customer fetches their final prescription (text + uploaded images) for download."""
+    b = await Db.mp_consultations.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b:
+        raise HTTPException(404, "Booking not found")
+    allowed = bool(email and email.lower() == b["customer"]["email"])
+    cust = await mp.current_customer(authorization)
+    if cust and cust.get("email") == b["customer"]["email"]:
+        allowed = True
+    if not allowed:
+        raise HTTPException(403, "Not authorised")
+    rx = (await Db.mp_prescriptions.find_one({"booking_id": booking_id, "status": "final"}, {"_id": 0})
+          or await Db.mp_prescriptions.find_one({"booking_id": booking_id}, {"_id": 0}))
+    return rx or {}
+
+
 @router.get("/prescriptions/{prescription_id}/pdf")
 async def prescription_pdf(prescription_id: str, authorization: str = Header(None),
                            x_admin_token: str = Header(None)):
@@ -1281,6 +1329,30 @@ async def _dispatch_instant(booking: Dict[str, Any]):
     return len(candidates)
 
 
+@router.get("/consultations/online-doctors")
+async def online_doctors(doctor_id: str = ""):
+    """Rate card of dermatologists online RIGHT NOW so the patient can pick before paying."""
+    cfg = await mp.cfg()
+    q: Dict[str, Any] = {"application_status": "approved", "active": True}
+    if doctor_id:
+        q["doctor_id"] = doctor_id
+    docs = [d for d in await Db.mp_doctors.find(q, {"_id": 0}).to_list(100) if mp.is_online(d)]
+    out = []
+    for d in docs:
+        if await _doctor_busy_now(d["doctor_id"]):
+            continue
+        base = (d.get("consultation") or {}).get("fee", 999)
+        pv = mp.price_view(base, cfg)
+        prof = d.get("professional") or {}
+        ph = d.get("photo") or {}
+        out.append({"doctor_id": d["doctor_id"], "name": d["personal"]["name"],
+                    "specialisation": prof.get("specialisation") or "Dermatologist",
+                    "experience_years": prof.get("experience_years"),
+                    "photo": ph.get("chosen") or ph.get("original_url") or "",
+                    "fee": pv["price"], "mrp": pv["mrp"]})
+    return {"doctors": out, "count": len(out)}
+
+
 @router.post("/consultations/instant")
 async def instant_consult(body: InstantConsultIn):
     cfg = await mp.cfg()
@@ -1376,6 +1448,45 @@ async def doctor_decline_instant(booking_id: str, authorization: str = Header(No
     d = await _doctor(authorization)
     await Db.mp_booking_offers.update_one({"booking_id": booking_id, "doctor_id": d["doctor_id"], "kind": "consult"},
                                           {"$set": {"status": "declined"}})
+    return {"success": True}
+
+
+@router.post("/consultations/{booking_id}/cancel-refund")
+async def consult_cancel_refund(booking_id: str, body: Dict[str, Any]):
+    """No doctor connected: stop ringing and refund the paid fee to the customer's wallet."""
+    email = (body.get("email") or "").lower()
+    b = await Db.mp_consultations.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b["customer"]["email"] != email:
+        raise HTTPException(404, "Booking not found")
+    if b["status"] in ("confirmed", "in_progress", "completed", "completion_pending"):
+        raise HTTPException(400, "A doctor already connected — request a refund from support instead.")
+    if b["status"] == "refunded":
+        return {"success": True, "already": True, "refunded": b.get("refunded_amount", 0)}
+    await Db.mp_booking_offers.update_many({"booking_id": booking_id}, {"$set": {"status": "expired"}})
+    refunded = 0.0
+    if b.get("payment_status") == "paid":
+        refunded = float(b.get("fee", 0))
+        await mp.wallet_move("customer", email, refunded, "credit",
+                             "Instant consult refund — no doctor connected", booking_id)
+    await Db.mp_consultations.update_one({"booking_id": booking_id}, {"$set": {
+        "status": "refunded", "refunded_amount": refunded, "refunded_to": "wallet", "updated_at": mp.now()}})
+    await mp.notify("customer", email, "Refunded to your wallet",
+                    f"₹{refunded} was added to your Celesta Glow wallet for {booking_id}. Use it to call another doctor.", "/my/bookings")
+    return {"success": True, "refunded": refunded}
+
+
+@router.post("/consultations/{booking_id}/refund-request")
+async def consult_refund_request(booking_id: str, body: Dict[str, Any]):
+    """Customer asks the admin to review a refund (e.g. call issues after a doctor connected)."""
+    email = (body.get("email") or "").lower()
+    b = await Db.mp_consultations.find_one({"booking_id": booking_id}, {"_id": 0})
+    if not b or b["customer"]["email"] != email:
+        raise HTTPException(404, "Booking not found")
+    if await Db.mp_refunds.find_one({"booking_id": booking_id, "status": "pending"}):
+        return {"success": True, "already": True}
+    await Db.mp_refunds.insert_one({"refund_id": mp.uid("rfd"), "booking_id": booking_id, "module": "consultation",
+        "customer_email": email, "customer_name": b["customer"]["name"], "amount": float(b.get("fee", 0)),
+        "reason": body.get("reason", ""), "status": "pending", "payment_status": b.get("payment_status"), "at": mp.now()})
     return {"success": True}
 
 

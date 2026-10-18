@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Users, CalendarDays, LayoutGrid, Star, LifeBuoy, Settings, Stethoscope } from 'lucide-react';
 import AdminMpCRM from './AdminMpCRM';
 import AllDermatologists from '../../components/admin/AllDermatologists';
+import AdminRefunds from '../../components/admin/AdminRefunds';
 import AdminMpBookings from './AdminMpBookings';
 import AdminSupport from './AdminSupport';
 import MpCategories from '../../components/admin/MpCategories';
@@ -23,6 +24,7 @@ const tabs = [
   ['reviews', 'Reviews', Star],
   ['earnings', 'Platform Earnings', IndianRupee],
   ['withdrawals', 'Withdrawals', Wallet],
+  ['refunds', 'Refunds', Stethoscope],
   ['support', 'Support Tickets', LifeBuoy],
   ['updates', 'Updates', Megaphone],
   ['settings', 'Settings', Settings],
@@ -50,6 +52,7 @@ const AdminDoctorHub = () => {
       {tab === 'reviews' && <MpReviews module="consultation" />}
       {tab === 'earnings' && <PlatformWallet />}
       {tab === 'withdrawals' && <MpWithdrawals ownerType="doctor" />}
+      {tab === 'refunds' && <AdminRefunds />}
       {tab === 'support' && <AdminSupport userType="doctor" />}
       {tab === 'updates' && <MpUpdates module="doctor" />}
       {tab === 'settings' && <MpSettings module="doctor" />}

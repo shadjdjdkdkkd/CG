@@ -9,8 +9,9 @@ import MpCustomServices from '../../components/admin/MpCustomServices';
 import { Wand2 } from 'lucide-react';
 import HbCatalogManager from '../../components/admin/HbCatalogManager';
 import MpWithdrawals from '../../components/admin/MpWithdrawals';
+import AdminRefunds from '../../components/admin/AdminRefunds';
 import MpUpdates from '../../components/admin/MpUpdates';
-import { Megaphone, Wallet } from 'lucide-react';
+import { Megaphone, Wallet, RotateCcw } from 'lucide-react';
 import { mp, adminHdr } from '../../utils/mpApi';
 
 export const PlatformWallet = () => {
@@ -67,6 +68,7 @@ const tabs = [
   ['reviews', 'Reviews', Star],
   ['earnings', 'Platform Earnings', IndianRupee],
   ['withdrawals', 'Withdrawals', Wallet],
+  ['refunds', 'Refunds', RotateCcw],
   ['support', 'Support Tickets', LifeBuoy],
   ['updates', 'Updates', Megaphone],
   ['settings', 'Settings', Settings],
@@ -93,6 +95,7 @@ const AdminPartnerHub = () => {
       {tab === 'reviews' && <MpReviews module="home" />}
       {tab === 'earnings' && <PlatformWallet />}
       {tab === 'withdrawals' && <MpWithdrawals ownerType="partner" />}
+      {tab === 'refunds' && <AdminRefunds />}
       {tab === 'support' && <AdminSupport userType="partner" />}
       {tab === 'updates' && <MpUpdates module="service" />}
       {tab === 'settings' && <MpSettings module="service" />}

@@ -10,28 +10,38 @@ const DoctorInstantRequests = () => {
   const navigate = useNavigate();
 
   const prevCount = React.useRef(0);
+  const alarmRef = React.useRef(null);
   const ring = () => {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const o = ctx.createOscillator(); const g = ctx.createGain();
       o.connect(g); g.connect(ctx.destination);
-      o.frequency.value = 880; g.gain.setValueAtTime(0.15, ctx.currentTime);
-      o.start(); o.stop(ctx.currentTime + 0.6);
+      o.frequency.value = 880; g.gain.setValueAtTime(0.18, ctx.currentTime);
+      o.start(); o.stop(ctx.currentTime + 0.5);
     } catch { /* audio blocked until user gesture */ }
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Celesta Glow — instant consultation request', { body: 'A patient is waiting. Accept to connect.' });
+  };
+  // Keep ringing (loop) while any request is pending; stop when the doctor accepts/declines (list empties).
+  const syncAlarm = (count) => {
+    if (count > 0 && !alarmRef.current) {
+      ring();
+      alarmRef.current = setInterval(ring, 2000);
+      if (count > prevCount.current && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('Celesta Glow — instant consultation request', { body: 'A patient is waiting. Accept to connect.' });
+      }
+    } else if (count === 0 && alarmRef.current) {
+      clearInterval(alarmRef.current); alarmRef.current = null;
     }
   };
   useEffect(() => { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); }, []);
   const load = () => mp.get('/doctor/requests', doctorHdr()).then((r) => {
-    if (r.data.length > prevCount.current) ring();
+    syncAlarm(r.data.length);
     prevCount.current = r.data.length;
     setOffers(r.data);
   }).catch(() => {});
   useEffect(() => {
     load();
     const t = setInterval(() => { load(); setNow(Date.now()); }, 8000);
-    return () => clearInterval(t);
+    return () => { clearInterval(t); if (alarmRef.current) clearInterval(alarmRef.current); };
   }, []);
 
   if (!offers.length) return null;

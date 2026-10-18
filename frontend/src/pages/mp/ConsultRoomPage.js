@@ -41,6 +41,13 @@ const ConsultRoomPage = () => {
     try { await mp.post(`/doctor/bookings/${bookingId}/verify`, { otp }, doctorHdr()); toast.success('Consultation verified & completed'); load(); }
     catch (e) { toast.error(e.response?.data?.detail || 'Verification failed'); } finally { setBusy(false); }
   };
+  const uploadRx = async (file) => {
+    if (!file) return;
+    const fd = new FormData(); fd.append('file', file);
+    setBusy(true);
+    try { await mp.post(`/doctor/bookings/${bookingId}/prescription/image`, fd, doctorHdr()); toast.success('Prescription image uploaded & sent to patient'); }
+    catch (e) { toast.error(e.response?.data?.detail || 'Upload failed'); } finally { setBusy(false); }
+  };
 
   return (
     <div className="min-h-screen bg-stone-900 text-white" data-testid="consult-room">
@@ -114,6 +121,10 @@ const ConsultRoomPage = () => {
               <button onClick={verify} disabled={busy || !otp} data-testid="doctor-verify-otp"
                 className="bg-white text-stone-900 text-xs font-extrabold rounded-full px-4 py-2.5">Verify & complete</button>
             </div>
+            <label className="mt-3 inline-flex items-center gap-1.5 border border-stone-600 text-stone-200 text-xs font-bold rounded-full px-4 py-2.5 cursor-pointer" data-testid="doctor-rx-image">
+              <FileText size={13} /> Upload prescription image
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadRx(e.target.files[0])} />
+            </label>
           </div>
         )}
         {room.role === 'customer' && room.status === 'completion_pending' && (

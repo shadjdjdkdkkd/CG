@@ -1018,6 +1018,32 @@ async def admin_partner_service_decision(partner_id: str, service_id: str, body:
 
 
 # ------------------------------------------------------- admin: withdrawals
+@router.get("/admin/refunds")
+async def admin_refunds(status: str = "", x_admin_token: str = Header(None)):
+    await _check_admin(x_admin_token)
+    q = {"status": status} if status else {}
+    return await Db.mp_refunds.find(q, {"_id": 0}).sort("at", -1).to_list(300)
+
+
+@router.post("/admin/refunds/{refund_id}/process")
+async def admin_process_refund(refund_id: str, body: Dict[str, Any], x_admin_token: str = Header(None)):
+    await _check_admin(x_admin_token)
+    r = await Db.mp_refunds.find_one({"refund_id": refund_id}, {"_id": 0})
+    if not r:
+        raise HTTPException(404, "Refund not found")
+    action = body.get("action", "refunded")
+    if action == "refunded" and body.get("to", "wallet") == "wallet" and r.get("customer_email"):
+        await mp.wallet_move("customer", r["customer_email"], float(r.get("amount", 0)), "credit",
+                             f"Refund for {r['booking_id']}", r["booking_id"])
+    await Db.mp_refunds.update_one({"refund_id": refund_id}, {"$set": {
+        "status": "refunded" if action == "refunded" else "rejected",
+        "reference": body.get("reference", ""), "processed_at": mp.now()}})
+    coll = Db.mp_consultations if r.get("module") == "consultation" else Db.mp_home_bookings
+    if action == "refunded":
+        await coll.update_one({"booking_id": r["booking_id"]}, {"$set": {"status": "refunded", "updated_at": mp.now()}})
+    return {"success": True}
+
+
 @router.get("/admin/withdrawals")
 async def admin_withdrawals(status: str = "", owner_type: str = "", x_admin_token: str = Header(None)):
     await _check_admin(x_admin_token)
