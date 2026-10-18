@@ -5,8 +5,19 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
 
 ### Integrations
 - Agora RTC video keys wired (AGORA_APP_ID + AGORA_APP_CERTIFICATE; REACT_APP_AGORA_APP_ID).
-  AgoraCall uses app_id+token from the backend room endpoint. Video media itself needs a live
-  2-party test (camera) — not scriptable here.
+  AgoraCall uses app_id+token from the backend room endpoint.
+
+## 2026-10-18 — VIDEO CALL BUG FIXED (iteration_9)
+- User reported "connection failed" even with a real doctor live. RCA: old Agora App ID was
+  rejected by Agora ("invalid vendor key, can not find appid") — dead/invalid project, NOT a code bug.
+- User supplied NEW Agora App ID + Primary Certificate → updated backend/.env + frontend/.env,
+  services restarted.
+- AgoraCall.js instrumented to surface exact Agora error codes in console for future debugging.
+- Verified end-to-end via testing agent with TWO simultaneous browser contexts (fake media):
+  seeded confirmed consult (TESTVID001, cleaned up after). Both doctor (uid 1001) and customer
+  (uid 2002) joined, exchanged live video (subscribe success both ways), mic/cam toggles work,
+  End call → ended screen, Rejoin re-establishes bidirectional video. Room endpoint 403s bad tokens.
+- Homepage, /doctors, /services regression-checked OK.
 - SendGrid key user sent was truncated → email stays on live Gmail SMTP.
 
 ### Phases 1–4 (tested — iteration_7)

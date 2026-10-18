@@ -1,0 +1,26 @@
+{
+  "summary": "Verified reported-bug fix: Agora two-party video consultation now works end-to-end with new Agora credentials. Executed TWO simultaneous Chromium contexts (fake-media args: --use-fake-device-for-media-stream, --use-fake-ui-for-media-stream) for DOCTOR (mp_doctor_token=testdoctorcalltoken) and CUSTOMER (cg_auth_token=testcustomercalltoken) against /consult-room/TESTVID001. Both sides joined the Agora channel cg_testvid001_testsecret and successfully subscribed to each other's video (640x480, HTMLVideoElement readyState=4, paused=false). Agora SDK logs confirm 'subscribe success user 2002, mediaType: video' on doctor side and 'subscribe success user 1001, mediaType: video' on customer side. No AgoraRTCException CAN_NOT_GET_GATEWAY_SERVER or 'invalid vendor key' errors. Call controls (mic/cam) toggle class to bg-rose-600 correctly. End call → call-ended screen shows and customer-side remote cleared (remoteChildren=0). Rejoin re-establishes bidirectional video. Room auth endpoint returns provider=agora with new app_id dde350c8d5324a859694da94981ace9e, uid 1001 for doctor, 2002 for customer, 403 for invalid token.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: cleanup seeded test data TESTVID001 (consultation + mp_sessions:testdoctorcalltoken + customer_sessions:testcustomercalltoken) once no longer needed — testing agent did NOT delete it per instructions.",
+    "Minor UX nit (not blocking): the state badge in AgoraCall.js initializes to 'joining' and only flips to 'live' after both local publish AND setState update; occasional 'OPERATION_ABORTED: cancel token canceled' warnings appear during End→Rejoin cycle as the SDK aborts a pending join on the old client instance — this is expected SDK behaviour but may generate noisy console warnings. Consider swallowing OPERATION_ABORTED on intentional unmount."
+  ],
+  "critical_code_review_comments": [
+    "ConsultRoomPage.js line 18: hdr selection via `localStorage.getItem('mp_doctor_token') ? doctorHdr() : customerHdr()` works but is fragile if a user ever has both tokens on the same origin — doctor header would always win. Not blocking for this test.",
+    "AgoraCall.js: console.error on join/publish failure includes the full exception as 'e' which is helpful for debugging; good instrumentation retained."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "mp_doctor_token=testdoctorcalltoken, cg_auth_token=testcustomercalltoken, booking_id=TESTVID001",
+  "seed_data_creation": "No new seed data created by testing agent — reused the TESTVID001 consultation seeded by main agent.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Agora video calling confirmed working end-to-end with new credentials (app_id dde350c8d5324a859694da94981ace9e). To re-run two-party verification, you MUST launch Chromium with ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] AND grant_permissions(['camera','microphone'], origin=BASE) for both contexts, otherwise the publish side will fail silently. The default MCP browser does NOT have these flags — use `async_playwright()` to launch a fresh browser inside your script. Verify remote video via document.querySelector('[data-testid=\"agora-remote\"]').querySelector('video') having readyState>=3 and videoWidth>0; do NOT rely solely on the LIVE badge text (SVG/text extraction can be flaky).",
+  "rca_of_the_issue": "Reported bug: 'connection failed' when real doctor accepted a consult. Main agent's RCA confirmed Agora rejected the old app_id ('invalid vendor key, can not find appid'). Fix: new Agora App ID + Certificate placed in backend/.env (AGORA_APP_ID, AGORA_APP_CERTIFICATE) and frontend/.env (REACT_APP_AGORA_APP_ID), services restarted. Testing agent verified: (a) /api/mp/consultations/TESTVID001/room now returns new app_id + valid 2-hour RTC token for both doctor (uid 1001) and customer (uid 2002); (b) two simultaneous browser clients join cg_testvid001_testsecret, exchange SDP, publish camera+mic, and subscribe to each other's streams; (c) no vendor-key or gateway errors in console. Bug is fully fixed."
+}
