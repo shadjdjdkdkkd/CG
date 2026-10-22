@@ -34,6 +34,9 @@ export default function AgoraCall({ room, onEnd }) {
         await c.publish([a, v]);
         setState('live');
       } catch (e) {
+        // React StrictMode double-mounts in dev: the first effect is torn down while
+        // client.join is in-flight, yielding OPERATION_ABORTED. That's harmless — ignore it.
+        if (e?.code === 'OPERATION_ABORTED') return;
         setState('error');
         // Surface the precise Agora failure so the real root cause is visible in logs.
         console.error('[AgoraCall] join/publish failed', { code: e?.code, name: e?.name, message: e?.message, e });

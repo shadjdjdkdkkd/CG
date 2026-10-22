@@ -1,0 +1,25 @@
+{
+  "summary": "Re-verified reported-bug fix (video consultation 'connection failed') with NEW Agora credentials. Executed two simultaneous Chromium contexts with fake media flags against /consult-room/TESTVID001 (doctor token=testdoctorcalltoken, customer token=testcustomercalltoken). Primary test (2-party call), End+Rejoin, and Room Auth all pass. Backend room endpoint returns provider=agora with app_id dde350c8d5324a859694da94981ace9e; doctor uid=1001, customer uid=2002; invalid token → 403. In browser: both sides reach LIVE, each remote <video> is playing (readyState=4, 640x480, paused=false). Agora SDK logs confirm 'Joining channel success' and 'subscribe success user 1001/2002, mediaType: video'. Zero CAN_NOT_GET_GATEWAY_SERVER / 'invalid vendor key' errors on either side. End call → data-testid='call-ended' visible on doctor side; customer side remote video count drops to 0. Rejoin → bidirectional video re-established (both remotes readyState=4). Bug is fully fixed with the new credentials.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/test_video_call_e2e.py"],
+  "action_items": [
+    "Optional cleanup (not performed): seeded consultation booking_id=TESTVID001 and sessions testdoctorcalltoken / testcustomercalltoken can be removed once no longer needed.",
+    "Non-blocking: AgoraCall.js logs an [AgoraCall] join/publish failed OPERATION_ABORTED error on every mount due to React StrictMode double-mount cancelling the first client.join. Consider swallowing OPERATION_ABORTED in the error handler to reduce console noise."
+  ],
+  "critical_code_review_comments": [
+    "ConsultRoomPage.js L18 picks the header solely on presence of mp_doctor_token in localStorage — if the same browser ever holds both tokens, doctor header wins silently. Minor, pre-existing."
+  ],
+  "updated_files": ["/app/tests/test_video_call_e2e.py (new)"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "mp_doctor_token=testdoctorcalltoken, cg_auth_token=testcustomercalltoken, booking_id=TESTVID001",
+  "seed_data_creation": "None — reused seed from main agent (TESTVID001).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To re-run two-party verification: launch chromium with ['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream'] AND ctx.grant_permissions(['camera','microphone'], origin=BASE). Click join-call with locator.click() (NO force=True — force bypasses trusted-click dispatch inconsistently against React synthetic events here). Verify remote via document.querySelector('[data-testid=\"agora-remote\"] video') having readyState>=3 and videoWidth>0.",
+  "rca_of_the_issue": "Original bug: 'connection failed' on real doctor consultation. RCA by main agent: old AGORA_APP_ID was invalid ('invalid vendor key'). Fix: new AGORA_APP_ID=dde350c8d5324a859694da94981ace9e + AGORA_APP_CERTIFICATE=ebb1fcca5bd341bfb21a6875b668302f set in backend/.env; REACT_APP_AGORA_APP_ID=dde350c8d5324a859694da94981ace9e in frontend/.env; services restarted. This iteration confirms end-to-end: /api/mp/consultations/TESTVID001/room now issues valid Agora RTC tokens signed with the new cert, two real browser clients successfully join, publish, and subscribe to each other with no vendor-key or gateway errors. Bug fixed."
+}

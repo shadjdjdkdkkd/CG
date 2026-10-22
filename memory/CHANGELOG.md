@@ -7,6 +7,21 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
 - Agora RTC video keys wired (AGORA_APP_ID + AGORA_APP_CERTIFICATE; REACT_APP_AGORA_APP_ID).
   AgoraCall uses app_id+token from the backend room endpoint.
 
+## 2026-10-22 — AGORA KEYS RESET (iteration_10) — VERIFIED
+- User again reported "connection failed". Root: a prior secret save accidentally put the
+  CERTIFICATE value into AGORA_APP_ID (both became ebb1fcca…), so app_id was wrong.
+- User supplied the real new pair via chat; set backend/.env AGORA_APP_ID=dde350…ce9e and
+  AGORA_APP_CERTIFICATE=ebb1…302f (distinct), frontend REACT_APP_AGORA_APP_ID=dde350…ce9e.
+- No Agora values are stored in the DB (scanned mp_config/site_settings/admin_settings) — env only.
+- Verified via testing agent (iteration_10): two simultaneous browser contexts on the real
+  /consult-room UI — both reach LIVE, each remote <video> playing (readyState=4), End call →
+  ended screen, Rejoin re-establishes bidirectional video, room endpoint 403s bad tokens, zero
+  CAN_NOT_GET_GATEWAY_SERVER / invalid-vendor-key errors. Bug fixed with new credentials.
+- Also swallowed benign OPERATION_ABORTED (StrictMode double-mount) in AgoraCall error handler.
+- NOTE for production: backend AGORA_* live values must match preview. The published secret store
+  still had the wrong app_id at one point — user must keep Re-publish→Secrets AGORA_APP_ID =
+  dde350…ce9e (NOT the certificate) so production matches, then re-publish.
+
 ## 2026-10-18 — VIDEO CALL BUG FIXED (iteration_9)
 - User reported "connection failed" even with a real doctor live. RCA: old Agora App ID was
   rejected by Agora ("invalid vendor key, can not find appid") — dead/invalid project, NOT a code bug.
