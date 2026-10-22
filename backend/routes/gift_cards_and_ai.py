@@ -1068,10 +1068,12 @@ async def _ai_generate_product_image(name: str, brand: str, category: str,
         "only. Studio lighting. Clean white seamless backdrop. "
         f"Ultra-clean e-commerce product photograph of a single {brand} skincare {category or 'product'}: '{name}'. "
         "STYLE (match exactly): one pristine WHITE pump bottle standing upright, perfectly centred, with a large "
-        "translucent glossy SERUM GEL DROPLET / swirl and a few smaller clear serum droplets arranged BEHIND and "
-        "beside the bottle (visible around the edges of the bottle) on a seamless PURE-WHITE (#FFFFFF) studio "
+        "thick, opaque WHITE CREAM swatch / swirl (whipped cream texture with soft peaks) and a few smaller white "
+        "cream dollops arranged BEHIND and beside the bottle (visible around the edges of the bottle) on a seamless "
+        "PURE-WHITE (#FFFFFF) studio "
         "background, soft even diffused lighting, NO grounding shadow, minimalist high-end clinical beauty aesthetic, "
-        "1:1 square. The serum drops must look like real transparent skincare gel, subtly tinted, never opaque. "
+        "1:1 square. The cream must look like a rich, thick, opaque WHITE CREAM — never liquid, serum, gel, oil or "
+        "any transparent fluid. "
         "The bottle label is printed in an elegant minimalist layout using GREEN and grey text: the vertical brand "
         f"wordmark 'CELESTA GLOW', then the product name '{name}', a formula line, "
         + (f"the key ingredients ({ings}), " if ings else "the key ingredients, ")
@@ -1353,6 +1355,9 @@ async def _ai_variation_image_emergent(name: str, brand: str, category: str,
         "green+grey CELESTA GLOW typography of the provided reference product image(s), but for THIS product. "
         f"Ultra-clean e-commerce product photo of a single {brand} skincare {category or 'product'}: '{name}' on a "
         "pure WHITE (#FFFFFF) studio background, soft diffused lighting, no grounding shadow, 1:1 square, photorealistic. "
+        "The container must be reproduced EXACTLY from the reference — same shape, cap/pump and label layout; never "
+        "invent a different bottle. This is a thick WHITE CREAM product: never depict liquid, serum drops, oil, gel "
+        "or transparent fluid anywhere in the image. "
         f"The printed product name on the label must read '{name}'. "
         + (f"Key ingredients: {ings}. " if ings else "")
         + (instructions or "")
@@ -1717,63 +1722,78 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
     headline = (benefits[0] if benefits else (prod.get("variation_result") or "Visibly Healthier Skin")).title()
     result = prod.get("variation_result") or (prod.get("concerns") or ["healthier skin"])[0]
 
-    # Shared, strict art-direction: COPY the template layout, SWAP the bottle,
-    # RECOLOUR to Celesta Glow green, STRIP competitor branding.
+    # Shared, strict art-direction. IMAGE 1 = the product's REAL photo (container
+    # ground truth). IMAGE 2 = layout template only. Cream format + product
+    # visibility are HARD requirements on every slot.
     head = (
         "You are a senior e-commerce creative director producing a PREMIUM Amazon listing image for an Indian "
         "skincare brand. You are given TWO reference images.\n"
-        "• IMAGE 1 is the exact LAYOUT TEMPLATE: copy its composition, element placement, proportions, typography "
-        "hierarchy, infographic devices (swatch circle / connector lines / stat pill / skin cross-section / model crop) "
-        "and its glossy, photorealistic advertising quality EXACTLY.\n"
-        "• IMAGE 2 is the CELESTA GLOW PRODUCT BOTTLE you must feature — reproduce THIS exact bottle (its real shape, "
-        "cap, proportions and white label), not the template's bottle.\n\n"
-        "MANDATORY TRANSFORMATIONS:\n"
-        "1) Replace the template's product with the Celesta Glow bottle from IMAGE 2.\n"
-        "2) RECOLOUR the ENTIRE creative from the template's purple/green scheme to the Celesta Glow palette: emerald "
+        "• IMAGE 1 is the PRODUCT'S REAL PHOTO — the exact container (bottle/jar/tube with its real cap/pump, "
+        "proportions and white label) that MUST appear, visually unchanged, as the product in your creative. Never "
+        "redesign, re-shape or re-label the container; never invent a different one.\n"
+        "• IMAGE 2 is a LAYOUT TEMPLATE only: copy its composition, element placement, proportions, typography "
+        "hierarchy and infographic devices (swatch circle / connector lines / stat pill / skin cross-section / model "
+        "crop) and its glossy, photorealistic advertising quality — but NEVER its container, its product, or its "
+        "liquid textures.\n\n"
+        "HARD RULES (non-negotiable):\n"
+        "A) CONTAINER: the container shown must be EXACTLY the one from IMAGE 1 — same shape, same cap/pump, same "
+        "label layout. If the template shows a different bottle (e.g. a dropper bottle), ignore it completely.\n"
+        "B) PRODUCT VISIBLE IN EVERY IMAGE: the container from IMAGE 1 must be clearly visible in this creative too "
+        "(on a pedestal, in a model's hand, or beside the texture). A listing image without the actual product is a "
+        "failure.\n"
+        "C) FORMAT — WHITE CREAM ONLY: this product is a rich, thick, opaque WHITE CREAM. Never depict liquid, "
+        "serum drops, oil, gel, water splashes or transparent fluid anywhere. Wherever the template uses a serum "
+        "swatch, droplet or liquid splash, render a thick whipped WHITE CREAM smear, swirl or dollop with soft peaks "
+        "instead.\n"
+        "D) RECOLOUR the ENTIRE creative from the template's purple/green scheme to the Celesta Glow palette: emerald "
         "green #22C55E and deep green #16A34A for headings/accents/badges, light mint #DCFCE7 section backgrounds, "
-        "dark slate #1E293B body text, crisp white, and a subtle gold #FACC15 accent. There must be NO purple anywhere.\n"
-        "3) REMOVE every 'The Derma Co' logo, cross-pill badge and all competitor text. The only brand shown is "
+        "dark slate #1E293B body text, crisp white, subtle gold #FACC15 accent. NO purple anywhere.\n"
+        "E) REMOVE every 'The Derma Co' logo, cross-pill badge and all competitor text. The only brand shown is "
         "'CELESTA GLOW'.\n"
-        "4) 1:1 SQUARE, ultra-high resolution, perfectly sharp and legible typography, generous whitespace, premium "
+        "F) 1:1 SQUARE, ultra-high resolution, perfectly sharp legible typography, generous whitespace, premium "
         "cosmetic-advertising finish.\n\n"
-        f"PRODUCT: '{name}' — {ptype}. Hero actives: {', '.join(acts) or ings or 'clinically-proven actives'}.\n\n"
+        f"PRODUCT: '{name}' — {ptype} (white cream formula). Hero actives: {', '.join(acts) or ings or 'clinically-proven actives'}.\n\n"
     )
     if slot == "hero":
         return head + (
-            "THIS IMAGE (hero): the Celesta Glow bottle on the left resting over a large soft translucent serum-swatch "
-            f"circle; on the right a large bold 2-3 line headline '{headline}' with the key word emphasised in emerald "
-            "green, a thin horizontal divider ending in a small green '+' mark, and a rounded emerald pill badge reading "
-            "'DERMATOLOGIST TESTED'. Airy near-white/mint background."
+            "THIS IMAGE (hero): the container from IMAGE 1 on the left resting over a large, thick, opaque WHITE CREAM "
+            "swatch circle (whipped cream texture with soft peaks — NOT translucent serum); on the right a large bold "
+            f"2-3 line headline '{headline}' with the key word emphasised in emerald green, a thin horizontal divider "
+            "ending in a small green '+' mark, and a rounded emerald pill badge reading 'DERMATOLOGIST TESTED'. Airy "
+            "near-white/mint background."
         )
     if slot == "ingredients":
         lines = acts or ["Active 1", "Active 2", "Active 3"]
         return head + (
-            "THIS IMAGE (ingredients): a glossy macro photograph of serum droplets and clear water-bubbles with the "
-            "dropper tip entering from the top-right. Overlay THREE ingredient call-outs, each a bold emerald ingredient "
-            "name with a one-line benefit beneath, connected to a droplet by a thin elbow line. Ingredients: "
-            + "; ".join(lines) + ". Light mint background."
+            "THIS IMAGE (ingredients): a glossy macro photograph of thick WHITE CREAM swirls and dollops with soft "
+            "peaks (whipped cream texture — absolutely no liquid droplets or water bubbles), with the container from "
+            "IMAGE 1 standing among the cream swirls. Overlay THREE ingredient call-outs, each a bold emerald "
+            "ingredient name with a one-line benefit beneath, connected to a cream swirl by a thin elbow line. "
+            "Ingredients: " + "; ".join(lines) + ". Light mint background."
         )
     if slot == "how_it_works":
         return head + (
-            f"THIS IMAGE (how it works): bold emerald headline 'Deep Absorption Formula' with divider + '+' mark; a "
-            f"rounded emerald stat pill reading 'Up to 2x better absorption*'; below it a photoreal split skin cross-section "
-            f"comparison labelled 'ORDINARY {ptype.upper()}' vs 'CELESTA GLOW' showing glowing particles penetrating deeper "
-            "on the Celesta Glow side (warm skin-layer illustration with green glow accents)."
+            "THIS IMAGE (how it works): bold emerald headline 'Deep Absorption Formula' with divider + '+' mark; a "
+            "rounded emerald stat pill reading 'Up to 2x better absorption*'; below it a photoreal split skin "
+            f"cross-section comparison labelled 'ORDINARY {ptype.upper()}' vs 'CELESTA GLOW' — on the Celesta Glow side "
+            "show a rich WHITE CREAM melting deep into the skin layers (green glow accents). The container from "
+            "IMAGE 1 sits at one corner."
         )
     if slot == "who_for":
         bl = benefits[:3] or ["All skin types", "Daily use", "Dermatologist approved"]
         return head + (
             "THIS IMAGE (who is it for): left side a bold emerald headline 'Who Is It For?' with a divider, then 2-3 "
-            "green toggle-style bullet rows: " + "; ".join(bl) + ". Right side a smiling young Indian woman with glowing "
-            "skin holding the Celesta Glow bottle near her face. Soft light-mint studio background."
+            "green toggle-style bullet rows: " + "; ".join(bl) + ". Right side a smiling young Indian woman with "
+            "glowing skin holding the EXACT container from IMAGE 1 near her face, with a small dab of white cream on "
+            "her cheek. Soft light-mint studio background."
         )
     if slot == "results":
         stat = "98%"
         return head + (
-            f"THIS IMAGE (results): an extreme beauty close-up of a young Indian woman's flawless glowing face filling the "
-            f"frame, holding the Celesta Glow bottle near her cheek on the right. On the left a very large bold emerald "
-            f"statistic '{stat}' then in slate text 'users saw {result} in 3 weeks*', and a small grey disclaimer line at "
-            "the bottom 'When used regularly. Based on a consumer survey.'"
+            "THIS IMAGE (results): an extreme beauty close-up of a young Indian woman's flawless glowing face filling "
+            "the frame, holding the EXACT container from IMAGE 1 near her cheek on the right. On the left a very large "
+            f"bold emerald statistic '{stat}' then in slate text 'users saw {result} in 3 weeks*', and a small grey "
+            "disclaimer line at the bottom 'When used regularly. Based on a consumer survey.'"
         )
     return head
 
@@ -1854,7 +1874,8 @@ async def generate_ecom_images(
     if not prod:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Reference bottle = the product's own hero image.
+    # Reference bottle = the product's own hero image. WITHOUT it we must NOT
+    # generate — otherwise the AI would invent a generic container.
     hero_bytes = None
     try:
         import httpx
@@ -1867,6 +1888,11 @@ async def generate_ecom_images(
                     hero_bytes = r.content
     except Exception:
         hero_bytes = None
+    if not hero_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail="This product has no main product photo, so the generator cannot show the real bottle. Add a main image to the product first, then generate.",
+        )
 
     slots = [s for s in (body.slots if body and body.slots else ECOM_SLOTS) if s in ECOM_SLOTS]
     if not slots:
@@ -1875,9 +1901,10 @@ async def generate_ecom_images(
     amazon, flipkart = [], []
     custom_prompts = (prod.get("ecom_prompts") or {})
     for idx, slot in enumerate(slots):
-        # Feed the AI the slot's LAYOUT TEMPLATE first, then the product bottle.
+        # IMAGE 1 = the product's REAL photo (container ground truth),
+        # IMAGE 2 = the slot's layout template. Order matches the prompt.
         ref_layout = _ecom_ref_bytes(slot)
-        refs = [b for b in (ref_layout, hero_bytes) if b]
+        refs = [b for b in (hero_bytes, ref_layout) if b]
         # Admin-edited prompt (saved on the product) overrides the default.
         _cp = (custom_prompts.get(slot) or "").strip()
         prompt = _cp if _cp else _ecom_prompt(slot, prod)
@@ -2538,8 +2565,9 @@ def _tech_prompt(name, brand, category, ings, hero, headline) -> str:
         "LAYOUT (match references exactly): clean PURE-WHITE (#FFFFFF) background with no grey tones or shadows, square 1:1. On the RIGHT, one pristine WHITE "
         "product bottle/tube with the CELESTA GLOW green+grey minimalist label. On the LEFT, a small grey eyebrow "
         f"label 'FORMULA TECHNOLOGY', then a BOLD dark-GREEN uppercase headline reading '{hl}', then one short "
-        "supporting sentence in grey. Include a translucent light-GREEN serum-droplet / molecule bubble cluster with "
-        f"a thin leader line labelling the hero active '{hero.upper()}' in green. "
+        "supporting sentence in grey. Include a thick WHITE CREAM swirl / dollop cluster with "
+        f"a thin leader line labelling the hero active '{hero.upper()}' in green. Never show liquid, serum drops, "
+        "oil, gel or transparent fluid — the formula is a rich opaque WHITE CREAM. "
         "Elegant, editorial, lots of white space, soft studio lighting, photorealistic product, crisp clean typography. "
         "No people, no watermark."
     )
