@@ -1873,11 +1873,15 @@ async def generate_ecom_images(
         slots = ECOM_SLOTS
 
     amazon, flipkart = [], []
+    custom_prompts = (prod.get("ecom_prompts") or {})
     for idx, slot in enumerate(slots):
         # Feed the AI the slot's LAYOUT TEMPLATE first, then the product bottle.
         ref_layout = _ecom_ref_bytes(slot)
         refs = [b for b in (ref_layout, hero_bytes) if b]
-        sq = await _ecom_gen_square(_ecom_prompt(slot, prod), refs)
+        # Admin-edited prompt (saved on the product) overrides the default.
+        _cp = (custom_prompts.get(slot) or "").strip()
+        prompt = _cp if _cp else _ecom_prompt(slot, prod)
+        sq = await _ecom_gen_square(prompt, refs)
         if not sq:
             continue
         amz_url = await _ecom_upload(sq, slug, f"amz-{slot}")
@@ -1892,8 +1896,97 @@ async def generate_ecom_images(
 
     if not amazon:
         raise HTTPException(status_code=502, detail="Image generation failed (AI key exhausted or Cloudinary not configured)")
+
+    # Persist the generated set ON the product so it survives refresh/reopen.
+    # Merge by slot: regenerating a slot replaces its image, other slots are kept.
+    saved = (prod.get("ecom_images") or {})
+    saved_amz = {x["slot"]: x["url"] for x in (saved.get("amazon") or [])}
+    saved_fk = {x["slot"]: x["url"] for x in (saved.get("flipkart") or [])}
+    for x in amazon:
+        saved_amz[x["slot"]] = x["url"]
+    for x in flipkart:
+        saved_fk[x["slot"]] = x["url"]
+    merged_amz = [{"slot": s, "url": saved_amz[s]} for s in ECOM_SLOTS if s in saved_amz]
+    merged_fk = [{"slot": s, "url": saved_fk[s]} for s in ECOM_SLOTS if s in saved_fk]
+    await _db.products.update_one(
+        {"slug": slug},
+        {"$set": {"ecom_images": {"amazon": merged_amz, "flipkart": merged_fk,
+                                  "updated_at": datetime.now(timezone.utc).isoformat()},
+                  "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
     return {"success": True, "product": {"slug": slug, "name": prod.get("name")},
-            "amazon": amazon, "flipkart": flipkart}
+            "amazon": merged_amz, "flipkart": merged_fk}
+
+
+@router.get("/admin/products/{slug}/ecom-images")
+async def get_ecom_images(
+    slug: str,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Return previously generated + saved listing images for a product (so the
+    section shows them again after a refresh / reopen)."""
+    _auth(x_admin_token, admin_session)
+    prod = await _db.products.find_one({"slug": slug}, {"_id": 0, "ecom_images": 1, "name": 1})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    saved = prod.get("ecom_images") or {}
+    return {"success": True, "product": {"slug": slug, "name": prod.get("name")},
+            "amazon": saved.get("amazon") or [], "flipkart": saved.get("flipkart") or []}
+
+
+# --- Prompt editor: default prompt per slot + save a custom override per product ---
+@router.get("/admin/products/{slug}/ecom-prompts")
+async def get_ecom_prompts(
+    slug: str,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Default (auto-built) prompt + any saved custom prompt for every slot."""
+    _auth(x_admin_token, admin_session)
+    prod = await _db.products.find_one({"slug": slug}, {"_id": 0})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    custom = prod.get("ecom_prompts") or {}
+    return {
+        "success": True,
+        "defaults": {s: _ecom_prompt(s, prod) for s in ECOM_SLOTS},
+        "custom": {s: custom.get(s) or "" for s in ECOM_SLOTS},
+    }
+
+
+class EcomPromptSave(BaseModel):
+    slot: str
+    prompt: str = ""  # empty => reset to default
+
+
+@router.put("/admin/products/{slug}/ecom-prompts")
+async def save_ecom_prompt(
+    slug: str,
+    body: EcomPromptSave,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Save (or clear) a custom generation prompt for one slot on a product."""
+    _auth(x_admin_token, admin_session)
+    if body.slot not in ECOM_SLOTS:
+        raise HTTPException(status_code=400, detail="Invalid slot")
+    # NOTE: no field projection here — projecting a missing field returns {}
+    # which is falsy and would falsely trigger the 404 below.
+    prod = await _db.products.find_one({"slug": slug}, {"_id": 0})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    prompts = dict(prod.get("ecom_prompts") or {})
+    text = (body.prompt or "").strip()
+    if text:
+        prompts[body.slot] = text[:4000]
+    else:
+        prompts.pop(body.slot, None)
+    await _db.products.update_one(
+        {"slug": slug},
+        {"$set": {"ecom_prompts": prompts, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"success": True, "custom": prompts.get(body.slot) or ""}
 
 
 
