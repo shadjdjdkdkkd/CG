@@ -1339,14 +1339,15 @@ def _strip_json(raw: str) -> dict:
 
 async def _ai_variation_image_emergent(name: str, brand: str, category: str,
                                        ref_bytes: Optional[list], ings: str,
-                                       instructions: str) -> Optional[str]:
+                                       instructions: str):
     """Image-gen fallback for variations via the Emergent universal key (Nano
     Banana / Gemini image model) when the brand's own GEMINI_API_KEY is
-    exhausted. Keeps the reference bottle; uploads result to Cloudinary."""
+    exhausted. Keeps the reference bottle; uploads result to Cloudinary.
+    Returns (url, raw_png_bytes) or (None, None)."""
     import base64 as _b64
     key = os.environ.get("LISTING_AI_KEY") or os.environ.get("EMERGENT_LLM_KEY")
     if not key:
-        return None
+        return None, None
     prompt = (
         "Recreate the EXACT bottle/jar shape, cap, proportions, size, packaging, white background, lighting and "
         "green+grey CELESTA GLOW typography of the provided reference product image(s), but for THIS product. "
@@ -1366,9 +1367,9 @@ async def _ai_variation_image_emergent(name: str, brand: str, category: str,
         _text, images = await chat.send_message_multimodal_response(msg)
     except Exception as e:
         logger.warning(f"[ai-variation] Emergent image fallback failed: {e}")
-        return None
+        return None, None
     if not images:
-        return None
+        return None, None
     out_bytes = _b64.b64decode(images[0]["data"])
     try:
         from services import cloudinary_service as _cs
@@ -1376,10 +1377,10 @@ async def _ai_variation_image_emergent(name: str, brand: str, category: str,
             res = await _cs.upload_image(_db, out_bytes, folder="celesta-glow/products",
                                          public_id=f"prod-{uuid.uuid4().hex[:12]}")
             if res.get("url"):
-                return res["url"]
+                return res["url"], out_bytes
     except Exception as e:
         logger.warning(f"[ai-variation] Cloudinary upload failed: {e}")
-    return None
+    return None, out_bytes
 
 
 
@@ -1502,7 +1503,7 @@ class CreateVariationRequest(BaseModel):
     benefits: Optional[list] = None
     how_to_use: Optional[str] = ""
     generate_image: bool = True
-    is_active: bool = False
+    is_active: bool = True
 
 
 @router.post("/admin/products/{slug}/ai-variations/create")
@@ -1538,6 +1539,7 @@ async def create_product_variation(
     # Regenerate the hero image from the base product's existing images so the
     # same bottle is reused (only the printed name / colour accent changes).
     image_url = None
+    hero_bytes = None
     if body.generate_image:
         ref_bytes = []
         try:
@@ -1564,9 +1566,10 @@ async def create_product_variation(
             + (f" and subtly accent the label to evoke '{body.result}'." if body.result else ".")
         )
         # 1) Brand's own Gemini key (direct).
+        hero_bytes = None
         if os.environ.get("GEMINI_API_KEY"):
             try:
-                image_url, _bytes = await _ai_generate_product_image(
+                image_url, hero_bytes = await _ai_generate_product_image(
                     body.name, brand, category, ref_images=ref_bytes or None,
                     extra_prompt=extra, instructions=instructions)
             except Exception as e:
@@ -1575,7 +1578,7 @@ async def create_product_variation(
         # 2) Emergent universal key fallback (Gemini image model) when Gemini
         #    is missing/exhausted.
         if not image_url:
-            image_url = await _ai_variation_image_emergent(body.name, brand, category, ref_bytes, ings, instructions)
+            image_url, hero_bytes = await _ai_variation_image_emergent(body.name, brand, category, ref_bytes, ings, instructions)
         if image_url and "res.cloudinary.com" in image_url and "/upload/" in image_url and "q_" not in image_url:
             image_url = image_url.replace("/upload/", "/upload/q_100,f_auto/", 1)
 
@@ -1626,7 +1629,271 @@ async def create_product_variation(
     }
     await _db.products.insert_one(product)
     product.pop("_id", None)
-    return {"success": True, "product": product, "image_generated": bool(image_url)}
+
+    # Build the FULL image set (ingredients / formula-technology cards +
+    # certificate + before/after) so the variation matches base products.
+    # These cards are Pillow-composed from the hero bottle (no extra AI cost).
+    gallery_built = False
+    if image_url:
+        try:
+            from services.gallery_composer import generate_and_persist
+            ai_bottle = None
+            if hero_bytes:
+                try:
+                    from PIL import Image as _PImg
+                    import io as _io2
+                    from services import brand_bottles as _bb
+                    _hero_im = _PImg.open(_io2.BytesIO(hero_bytes)).convert("RGB")
+                    ai_bottle = _bb._trim(_bb._alpha_cutout(_hero_im))
+                except Exception as _be:
+                    logger.warning(f"[ai-variation] bottle extract failed: {_be}")
+            media = await generate_and_persist(
+                _db,
+                {**product, "solves": ", ".join(product.get("concerns") or []) or "your skin concern"},
+                do_gallery=True, do_certificate=True, do_before_after=True,
+                bottle_override=ai_bottle, hero_url=image_url,
+            )
+            b_img = media.pop("before_after_before", None)
+            a_img = media.pop("before_after_after", None)
+            if media.get("images"):
+                media["image_gallery"] = [{"url": u, "alt": f"{product['name']} — {brand}"} for u in media["images"]]
+                media["image"] = media["images"][0]
+            if media:
+                await _db.products.update_one({"slug": new_slug}, {"$set": {**media, "updated_at": now_iso}})
+                product.update(media)
+                gallery_built = True
+            if b_img and a_img:
+                ba_id = "ba_" + hashlib.md5(new_slug.encode()).hexdigest()[:8]
+                await _db.before_after_images.update_one(
+                    {"ba_id": ba_id},
+                    {"$set": {"ba_id": ba_id, "product_slug": new_slug,
+                              "before_image": b_img, "after_image": a_img,
+                              "description": f"{product['name']} — visible improvement",
+                              "is_global": False, "sort_order": 0, "created_at": now_iso}},
+                    upsert=True,
+                )
+        except Exception as e:
+            logger.warning(f"[ai-variation] full image-set generation failed (non-fatal): {e}")
+
+    return {"success": True, "product": product, "image_generated": bool(image_url),
+            "gallery_built": gallery_built}
+
+
+
+# ----------------------------------------------------------------------------
+# E-COMMERCE IMAGE GENERATOR — turn any catalog product into a marketplace
+# listing set. Generates Amazon-style SQUARE creatives (1000x1000) in Celesta
+# Glow's own brand colours, then builds Flipkart versions: image 1 identical to
+# Amazon; images 2+ = the same square creative centred on a tall white portrait
+# canvas (1179x2010) with equal white bands top & bottom. Each is a downloadable
+# JPG. Admin-triggered; only the slots the admin ticks are generated (credits).
+# ----------------------------------------------------------------------------
+# Celesta Glow brand palette (NOT the reference purple/green): emerald green
+# #22C55E / #16A34A, light mint #DCFCE7, slate #1E293B, gold accent #FACC15.
+_CG_BRAND = ("Celesta Glow brand colours ONLY: emerald green #22C55E and #16A34A, "
+             "light mint #DCFCE7 backgrounds, dark slate #1E293B text, white, subtle gold #FACC15 accents. "
+             "A small plus '+' leaf mark may appear as the brand motif. Do NOT use purple or any competitor branding.")
+
+ECOM_SLOTS = ["hero", "ingredients", "how_it_works", "who_for", "results"]
+
+_ECOM_REF_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "ecom_refs")
+
+
+def _ecom_ref_bytes(slot: str):
+    """Load the Derma-Co-style LAYOUT template for a slot (persisted in the repo)."""
+    try:
+        with open(os.path.join(_ECOM_REF_DIR, f"{slot}.webp"), "rb") as f:
+            return f.read()
+    except Exception:
+        return None
+
+
+def _ecom_prompt(slot: str, prod: dict) -> str:
+    name = prod.get("name", "the product")
+    ptype = prod.get("subcategory") or prod.get("category") or "skincare product"
+    ings = prod.get("key_ingredients") or ""
+    acts = [a.strip() for a in re.split(r"[+,]", ings) if a.strip()][:3]
+    benefits = [str(b).strip() for b in (prod.get("benefits") or []) if str(b).strip()][:4]
+    headline = (benefits[0] if benefits else (prod.get("variation_result") or "Visibly Healthier Skin")).title()
+    result = prod.get("variation_result") or (prod.get("concerns") or ["healthier skin"])[0]
+
+    # Shared, strict art-direction: COPY the template layout, SWAP the bottle,
+    # RECOLOUR to Celesta Glow green, STRIP competitor branding.
+    head = (
+        "You are a senior e-commerce creative director producing a PREMIUM Amazon listing image for an Indian "
+        "skincare brand. You are given TWO reference images.\n"
+        "• IMAGE 1 is the exact LAYOUT TEMPLATE: copy its composition, element placement, proportions, typography "
+        "hierarchy, infographic devices (swatch circle / connector lines / stat pill / skin cross-section / model crop) "
+        "and its glossy, photorealistic advertising quality EXACTLY.\n"
+        "• IMAGE 2 is the CELESTA GLOW PRODUCT BOTTLE you must feature — reproduce THIS exact bottle (its real shape, "
+        "cap, proportions and white label), not the template's bottle.\n\n"
+        "MANDATORY TRANSFORMATIONS:\n"
+        "1) Replace the template's product with the Celesta Glow bottle from IMAGE 2.\n"
+        "2) RECOLOUR the ENTIRE creative from the template's purple/green scheme to the Celesta Glow palette: emerald "
+        "green #22C55E and deep green #16A34A for headings/accents/badges, light mint #DCFCE7 section backgrounds, "
+        "dark slate #1E293B body text, crisp white, and a subtle gold #FACC15 accent. There must be NO purple anywhere.\n"
+        "3) REMOVE every 'The Derma Co' logo, cross-pill badge and all competitor text. The only brand shown is "
+        "'CELESTA GLOW'.\n"
+        "4) 1:1 SQUARE, ultra-high resolution, perfectly sharp and legible typography, generous whitespace, premium "
+        "cosmetic-advertising finish.\n\n"
+        f"PRODUCT: '{name}' — {ptype}. Hero actives: {', '.join(acts) or ings or 'clinically-proven actives'}.\n\n"
+    )
+    if slot == "hero":
+        return head + (
+            "THIS IMAGE (hero): the Celesta Glow bottle on the left resting over a large soft translucent serum-swatch "
+            f"circle; on the right a large bold 2-3 line headline '{headline}' with the key word emphasised in emerald "
+            "green, a thin horizontal divider ending in a small green '+' mark, and a rounded emerald pill badge reading "
+            "'DERMATOLOGIST TESTED'. Airy near-white/mint background."
+        )
+    if slot == "ingredients":
+        lines = acts or ["Active 1", "Active 2", "Active 3"]
+        return head + (
+            "THIS IMAGE (ingredients): a glossy macro photograph of serum droplets and clear water-bubbles with the "
+            "dropper tip entering from the top-right. Overlay THREE ingredient call-outs, each a bold emerald ingredient "
+            "name with a one-line benefit beneath, connected to a droplet by a thin elbow line. Ingredients: "
+            + "; ".join(lines) + ". Light mint background."
+        )
+    if slot == "how_it_works":
+        return head + (
+            f"THIS IMAGE (how it works): bold emerald headline 'Deep Absorption Formula' with divider + '+' mark; a "
+            f"rounded emerald stat pill reading 'Up to 2x better absorption*'; below it a photoreal split skin cross-section "
+            f"comparison labelled 'ORDINARY {ptype.upper()}' vs 'CELESTA GLOW' showing glowing particles penetrating deeper "
+            "on the Celesta Glow side (warm skin-layer illustration with green glow accents)."
+        )
+    if slot == "who_for":
+        bl = benefits[:3] or ["All skin types", "Daily use", "Dermatologist approved"]
+        return head + (
+            "THIS IMAGE (who is it for): left side a bold emerald headline 'Who Is It For?' with a divider, then 2-3 "
+            "green toggle-style bullet rows: " + "; ".join(bl) + ". Right side a smiling young Indian woman with glowing "
+            "skin holding the Celesta Glow bottle near her face. Soft light-mint studio background."
+        )
+    if slot == "results":
+        stat = "98%"
+        return head + (
+            f"THIS IMAGE (results): an extreme beauty close-up of a young Indian woman's flawless glowing face filling the "
+            f"frame, holding the Celesta Glow bottle near her cheek on the right. On the left a very large bold emerald "
+            f"statistic '{stat}' then in slate text 'users saw {result} in 3 weeks*', and a small grey disclaimer line at "
+            "the bottom 'When used regularly. Based on a consumer survey.'"
+        )
+    return head
+
+
+async def _ecom_gen_square(prompt: str, ref_bytes: Optional[list]):
+    """Generate ONE 1000x1000 JPG listing creative. Tries the brand's Gemini key,
+    then the Emergent universal key (Nano Banana). Returns JPG bytes or None."""
+    import base64 as _b64, io as _io
+    from PIL import Image as _PImg
+    keys, seen = [], set()
+    for k in (os.environ.get("LISTING_AI_KEY"), os.environ.get("EMERGENT_LLM_KEY"), os.environ.get("GEMINI_API_KEY")):
+        if k and k not in seen:
+            seen.add(k); keys.append(k)
+    if not keys:
+        return None
+    from emergentintegrations.llm.chat import UserMessage, ImageContent
+    last = None
+    for key in keys:
+        try:
+            chat = GeminiChat(api_key=key, session_id=f"ecom-{uuid.uuid4().hex[:8]}",
+                              system_message="You are an expert e-commerce creative designer.")
+            chat.with_model("gemini", "gemini-2.5-flash-image").with_params(modalities=["image", "text"])
+            fcs = [ImageContent(_b64.b64encode(b).decode("utf-8")) for b in (ref_bytes or []) if b]
+            _t, imgs = await chat.send_message_multimodal_response(UserMessage(text=prompt, file_contents=fcs))
+            if imgs:
+                raw = _b64.b64decode(imgs[0]["data"])
+                im = _PImg.open(_io.BytesIO(raw)).convert("RGB")
+                w, h = im.size
+                s = min(w, h)
+                im = im.crop(((w - s) // 2, (h - s) // 2, (w + s) // 2, (h + s) // 2)).resize((1000, 1000), _PImg.LANCZOS)
+                out = _io.BytesIO(); im.save(out, "JPEG", quality=92)
+                return out.getvalue()
+        except Exception as e:
+            last = e; continue
+    logger.warning(f"[ecom] image generation failed: {last}")
+    return None
+
+
+def _flipkart_from_square(square_bytes: bytes) -> bytes:
+    """Place a square creative centred (full width) on a tall white 1179x2010
+    portrait canvas with equal white bands top & bottom. Returns JPG bytes."""
+    import io as _io
+    from PIL import Image as _PImg
+    W, Hc = 1179, 2010
+    sq = _PImg.open(_io.BytesIO(square_bytes)).convert("RGB").resize((W, W), _PImg.LANCZOS)
+    canvas = _PImg.new("RGB", (W, Hc), (255, 255, 255))
+    canvas.paste(sq, (0, (Hc - W) // 2))
+    out = _io.BytesIO(); canvas.save(out, "JPEG", quality=92)
+    return out.getvalue()
+
+
+async def _ecom_upload(jpg_bytes: bytes, slug: str, tag: str) -> Optional[str]:
+    try:
+        from services import cloudinary_service as _cs
+        if await _cs.ensure_configured(_db):
+            res = await _cs.upload_image(_db, jpg_bytes, folder="celesta-glow/ecom",
+                                         public_id=f"ecom-{slug}-{tag}-{uuid.uuid4().hex[:6]}")
+            return res.get("url")
+    except Exception as e:
+        logger.warning(f"[ecom] upload failed: {e}")
+    return None
+
+
+class EcomImagesRequest(BaseModel):
+    slots: Optional[list] = None  # subset of ECOM_SLOTS; default = all
+
+
+@router.post("/admin/products/{slug}/ecom-images")
+async def generate_ecom_images(
+    slug: str,
+    body: Optional[EcomImagesRequest] = None,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Generate Amazon (square) + Flipkart (tall-centred) listing JPGs for a product."""
+    _auth(x_admin_token, admin_session)
+    prod = await _db.products.find_one({"slug": slug}, {"_id": 0})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    # Reference bottle = the product's own hero image.
+    hero_bytes = None
+    try:
+        import httpx
+        first = (prod.get("images") or [None])[0]
+        if first:
+            full = first if first.startswith("http") else f"{os.environ.get('REACT_APP_BACKEND_URL', '')}{first}"
+            async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+                r = await client.get(full)
+                if r.status_code == 200 and r.content:
+                    hero_bytes = r.content
+    except Exception:
+        hero_bytes = None
+
+    slots = [s for s in (body.slots if body and body.slots else ECOM_SLOTS) if s in ECOM_SLOTS]
+    if not slots:
+        slots = ECOM_SLOTS
+
+    amazon, flipkart = [], []
+    for idx, slot in enumerate(slots):
+        # Feed the AI the slot's LAYOUT TEMPLATE first, then the product bottle.
+        ref_layout = _ecom_ref_bytes(slot)
+        refs = [b for b in (ref_layout, hero_bytes) if b]
+        sq = await _ecom_gen_square(_ecom_prompt(slot, prod), refs)
+        if not sq:
+            continue
+        amz_url = await _ecom_upload(sq, slug, f"amz-{slot}")
+        if amz_url:
+            amazon.append({"slot": slot, "url": amz_url})
+        # Flipkart: the FIRST creative stays identical to Amazon; the rest get the
+        # tall white portrait canvas treatment.
+        fk_bytes = sq if idx == 0 else _flipkart_from_square(sq)
+        fk_url = await _ecom_upload(fk_bytes, slug, f"fk-{slot}")
+        if fk_url:
+            flipkart.append({"slot": slot, "url": fk_url})
+
+    if not amazon:
+        raise HTTPException(status_code=502, detail="Image generation failed (AI key exhausted or Cloudinary not configured)")
+    return {"success": True, "product": {"slug": slug, "name": prod.get("name")},
+            "amazon": amazon, "flipkart": flipkart}
 
 
 

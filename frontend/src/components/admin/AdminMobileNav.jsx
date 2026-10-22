@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Menu, X, LayoutDashboard, FileText, MapPin, Package, Sparkles, Globe, Phone,
   Star, Stethoscope, Users, Activity, Route, Gift, Shield, MessageSquare,
-  Settings, LogOut, Upload, Warehouse, Percent,
+  Settings, LogOut, Upload, Warehouse, Percent, Images,
 } from 'lucide-react';
 
 // One unified nav list — single source of truth (used by both desktop sidebar AND mobile drawer).
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { to: '/admin/products', label: 'Products', icon: Package, color: 'green' },
   { to: '/admin/bulk-import', label: 'Bulk Import (Excel)', icon: Upload, color: 'indigo' },
   { to: '/admin/amazon-flipkart', label: 'Amazon & Flipkart Listing', icon: Package, color: 'amber', featured: true },
+  { to: '/admin/ecom-images', label: 'E-commerce Image Generator', icon: Images, color: 'emerald', featured: true },
   { to: '/admin/master-tools', label: 'Master Tools', icon: Sparkles, color: 'emerald' },
   { to: '/admin/media-tools', label: 'Media, SEO & Splash', icon: Shield, color: 'purple' },
   { to: '/admin/reels', label: 'Influencer Reels', icon: Sparkles, color: 'rose' },

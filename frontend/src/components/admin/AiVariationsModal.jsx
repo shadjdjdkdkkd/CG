@@ -44,7 +44,7 @@ export const AiVariationsModal = ({ product, headers, onClose, onCreated }) => {
       const res = await axios.post(`${API}/admin/products/${slug}/ai-variations/create`, {
         name: v.name, result: v.result, tagline: v.tagline, description: v.description,
         key_ingredients: v.key_ingredients, benefits: v.benefits, how_to_use: v.how_to_use,
-        generate_image: v.generate_image, is_active: false,
+        generate_image: v.generate_image, is_active: true,
       }, { headers });
       patch(i, { _state: 'created', _msg: res.data?.image_generated ? 'Created with new image' : 'Created' });
       onCreated && onCreated();
@@ -98,7 +98,7 @@ export const AiVariationsModal = ({ product, headers, onClose, onCreated }) => {
           {status === 'ready' && (
             <>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-gray-500">{variations.length} suggested · each new variation is created <b>inactive</b> so you can review before publishing.</p>
+                <p className="text-xs text-gray-500">{variations.length} suggested · each new variation is created <b>active</b> (live on the store) with a full image set.</p>
                 <button onClick={createAll} disabled={anyBusy} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold" data-testid="ai-variations-create-all"><ImagePlus size={13} /> Create all</button>
               </div>
               <div className="space-y-3">

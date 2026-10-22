@@ -830,7 +830,7 @@ function AdminProducts() {
         setEditProduct(null);
         return;
       }
-      await axios.put(`${API}/admin/products/${slug}`, data, { headers });
+      await axios.put(`${API}/admin/products/${slug}`, (() => { const d = { ...data }; delete d.__skipValidation; delete d.__isNew; return d; })(), { headers });
       fetchAll();
       setEditProduct(null);
     } catch (err) { alert(err.response?.data?.detail || 'Update failed'); }
@@ -976,7 +976,7 @@ function AdminProducts() {
 
 
   const toggleProductActive = async (slug, isActive) => {
-    await updateProduct(slug, { is_active: !isActive });
+    await updateProduct(slug, { is_active: !isActive, __skipValidation: true });
   };
 
   const updateCombo = async (comboId, data) => {
@@ -2375,7 +2375,7 @@ function AdminProducts() {
                       <button onClick={() => setAiVarProduct(product)} className="p-2 hover:bg-violet-50 rounded-lg" title="Generate AI variations from ingredients" data-testid={`ai-variations-${product.slug}`}><Layers size={16} className="text-violet-600" /></button>
                     )}
                     <button onClick={() => setEditProduct({...product})} className="p-2 hover:bg-gray-100 rounded-lg" title="Edit" data-testid={`edit-${product.slug}`}><Edit size={16} className="text-gray-500" /></button>
-                    <button onClick={() => toggleProductActive(product.slug, product.is_active)} className="p-2 hover:bg-gray-100 rounded-lg" title={product.is_active ? 'Deactivate' : 'Activate'}>
+                    <button onClick={() => toggleProductActive(product.slug, product.is_active)} className="p-2 hover:bg-gray-100 rounded-lg" title={product.is_active ? 'Deactivate' : 'Activate'} data-testid={`toggle-active-${product.slug}`}>
                       {product.is_active ? <Eye size={16} className="text-green-500" /> : <EyeOff size={16} className="text-red-500" />}
                     </button>
                     <button onClick={() => deleteProduct(product.slug)} className="p-2 hover:bg-red-50 rounded-lg" title="Delete" data-testid={`delete-${product.slug}`}><Trash2 size={16} className="text-red-500" /></button>
