@@ -1314,6 +1314,323 @@ async def set_main_image(
 
 
 # ----------------------------------------------------------------------------
+# AI PRODUCT VARIATIONS — analyse a product's ingredients, figure out the
+# distinct RESULTS the formula can deliver, and spin up result-led variations
+# (upgraded name + fresh copy + a regenerated image that keeps the SAME bottle).
+# Two steps keep AI spend low: (1) one cheap text call suggests variations;
+# (2) image generation only happens when the admin actually creates one.
+# ----------------------------------------------------------------------------
+class AiVariationsRequest(BaseModel):
+    count: Optional[int] = None  # None => AI decides (2-5)
+
+
+def _strip_json(raw: str) -> dict:
+    raw = (raw or "").strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    try:
+        return json.loads(raw)
+    except Exception:
+        m = re.search(r"\{[\s\S]*\}", raw)
+        if not m:
+            raise HTTPException(status_code=502, detail="AI returned non-JSON content")
+        return json.loads(m.group(0))
+
+
+async def _ai_variation_image_emergent(name: str, brand: str, category: str,
+                                       ref_bytes: Optional[list], ings: str,
+                                       instructions: str) -> Optional[str]:
+    """Image-gen fallback for variations via the Emergent universal key (Nano
+    Banana / Gemini image model) when the brand's own GEMINI_API_KEY is
+    exhausted. Keeps the reference bottle; uploads result to Cloudinary."""
+    import base64 as _b64
+    key = os.environ.get("LISTING_AI_KEY") or os.environ.get("EMERGENT_LLM_KEY")
+    if not key:
+        return None
+    prompt = (
+        "Recreate the EXACT bottle/jar shape, cap, proportions, size, packaging, white background, lighting and "
+        "green+grey CELESTA GLOW typography of the provided reference product image(s), but for THIS product. "
+        f"Ultra-clean e-commerce product photo of a single {brand} skincare {category or 'product'}: '{name}' on a "
+        "pure WHITE (#FFFFFF) studio background, soft diffused lighting, no grounding shadow, 1:1 square, photorealistic. "
+        f"The printed product name on the label must read '{name}'. "
+        + (f"Key ingredients: {ings}. " if ings else "")
+        + (instructions or "")
+    )
+    try:
+        from emergentintegrations.llm.chat import UserMessage, ImageContent
+        chat = GeminiChat(api_key=key, session_id=f"var-img-{uuid.uuid4().hex[:8]}",
+                          system_message="You are a professional product photographer.")
+        chat.with_model("gemini", "gemini-2.5-flash-image").with_params(modalities=["image", "text"])
+        file_contents = [ImageContent(_b64.b64encode(b).decode("utf-8")) for b in (ref_bytes or []) if b]
+        msg = UserMessage(text=prompt, file_contents=file_contents)
+        _text, images = await chat.send_message_multimodal_response(msg)
+    except Exception as e:
+        logger.warning(f"[ai-variation] Emergent image fallback failed: {e}")
+        return None
+    if not images:
+        return None
+    out_bytes = _b64.b64decode(images[0]["data"])
+    try:
+        from services import cloudinary_service as _cs
+        if await _cs.ensure_configured(_db):
+            res = await _cs.upload_image(_db, out_bytes, folder="celesta-glow/products",
+                                         public_id=f"prod-{uuid.uuid4().hex[:12]}")
+            if res.get("url"):
+                return res["url"]
+    except Exception as e:
+        logger.warning(f"[ai-variation] Cloudinary upload failed: {e}")
+    return None
+
+
+
+@router.post("/admin/products/{slug}/ai-variations")
+async def ai_product_variations(
+    slug: str,
+    body: Optional[AiVariationsRequest] = None,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Analyse the product's ingredients and SUGGEST result-led variations
+    (text only — no images, no DB writes). Admin reviews, then creates the ones
+    they want via /ai-variations/create."""
+    _auth(x_admin_token, admin_session)
+    prod = await _db.products.find_one({"slug": slug}, {"_id": 0})
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("LISTING_AI_KEY") or os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="No AI key configured (set GEMINI_API_KEY)")
+
+    brand = prod.get("brand") or "Celesta Glow"
+    ptype = prod.get("subcategory") or prod.get("category") or "skincare product"
+    count = (body.count if body and body.count else None)
+    count_rule = (f"Create EXACTLY {count} variations." if count
+                  else "Create between 2 and 5 variations — you decide the number based on how many "
+                       "genuinely DISTINCT results the ingredients can support (don't pad with weak ones).")
+    prompt = f"""You are a senior product strategist for "{brand}", an Indian skincare brand.
+
+BASE PRODUCT
+Name: {prod.get('name', '')}
+Type: {ptype}
+Key ingredients: {prod.get('key_ingredients') or '(not listed)'}
+Full ingredients: {(prod.get('ingredients_full') or '')[:600]}
+Current description: {(prod.get('description') or '')[:500]}
+
+TASK
+Analyse the ingredients and work out the DISTINCT skin RESULTS this exact formula can realistically deliver.
+For each strong, genuinely different result, create ONE upgraded VARIATION that repositions the SAME formula around that result.
+
+RULES
+- {count_rule}
+- Each variation NAME must be result-led and specific, formatted as "{brand} <Result> <ProductType>"
+  (keep the base product type) — e.g. "{brand} Tan Removal Cleanser", "{brand} Oil-Control Cleanser".
+- Only reposition around results the GIVEN ingredients can plausibly drive. Do NOT invent new ingredients.
+- No medical claims, no "cure", no "miracle", no "instant".
+- Each variation gets its own fresh copy (not copy-pasted from the base).
+
+Return STRICT JSON only (no markdown fences), exactly this shape:
+{{
+  "variations": [
+    {{
+      "name": "<{brand} ... {ptype}>",
+      "result": "<the single standout result, 2-4 words>",
+      "tagline": "<benefit-led tagline, max 10 words>",
+      "description": "<120-170 word consumer description for an Indian store, centred on this result>",
+      "key_ingredients": "<comma-separated 3-5 hero actives, a subset/emphasis of the base ingredients>",
+      "benefits": ["<4-5 short benefit phrases, each <=8 words>"],
+      "how_to_use": "<2-4 short steps, newline separated>"
+    }}
+  ]
+}}"""
+    try:
+        from emergentintegrations.llm.chat import UserMessage
+        # Try the brand's own Gemini key first; if it's exhausted/invalid, fall
+        # back to the Emergent universal key (routes through Gemini models too).
+        _keys, _seen = [], set()
+        for _k in (os.environ.get("GEMINI_API_KEY"), os.environ.get("LISTING_AI_KEY"), os.environ.get("EMERGENT_LLM_KEY")):
+            if _k and _k not in _seen:
+                _seen.add(_k); _keys.append(_k)
+        data, last_err = None, None
+        for _k in _keys:
+            try:
+                chat = GeminiChat(
+                    api_key=_k,
+                    session_id=f"variations-{uuid.uuid4().hex[:8]}",
+                    system_message="You are a precise JSON-only skincare product strategist.",
+                ).with_model("gemini", "gemini-2.5-flash")
+                resp = await chat.send_message(UserMessage(text=prompt))
+                data = _strip_json(resp)
+                break
+            except Exception as e:
+                last_err = e
+                continue
+        if data is None:
+            raise HTTPException(status_code=502, detail=f"AI variation analysis failed: {str(last_err)[:160]}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI variation analysis failed: {str(e)[:160]}")
+
+    variations = []
+    for v in (data.get("variations") or [])[:6]:
+        if not v.get("name"):
+            continue
+        variations.append({
+            "name": str(v.get("name"))[:120],
+            "result": str(v.get("result") or "")[:60],
+            "tagline": str(v.get("tagline") or "")[:120],
+            "description": str(v.get("description") or "")[:1800],
+            "key_ingredients": str(v.get("key_ingredients") or prod.get("key_ingredients") or "")[:400],
+            "benefits": [str(b)[:80] for b in (v.get("benefits") or [])][:8],
+            "how_to_use": str(v.get("how_to_use") or "")[:600],
+        })
+    if not variations:
+        raise HTTPException(status_code=502, detail="AI did not return any usable variations")
+    return {
+        "success": True,
+        "base": {"slug": slug, "name": prod.get("name"), "brand": brand, "images": prod.get("images") or []},
+        "variations": variations,
+    }
+
+
+class CreateVariationRequest(BaseModel):
+    name: str
+    result: Optional[str] = ""
+    tagline: Optional[str] = ""
+    description: Optional[str] = ""
+    key_ingredients: Optional[str] = ""
+    benefits: Optional[list] = None
+    how_to_use: Optional[str] = ""
+    generate_image: bool = True
+    is_active: bool = False
+
+
+@router.post("/admin/products/{slug}/ai-variations/create")
+async def create_product_variation(
+    slug: str,
+    body: CreateVariationRequest,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Create ONE variation as a real product. Copies the base product's pricing,
+    category, concerns and niche; sets is_variation + parent_slug; and (if
+    generate_image) regenerates a hero image using the base product's own images
+    as references so the BOTTLE SHAPE stays identical — only the label/result changes."""
+    _auth(x_admin_token, admin_session)
+    base = await _db.products.find_one({"slug": slug}, {"_id": 0})
+    if not base:
+        raise HTTPException(status_code=404, detail="Base product not found")
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="Variation name is required")
+
+    brand = base.get("brand") or "Celesta Glow"
+    category = base.get("subcategory") or base.get("category") or ""
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # unique slug
+    base_slug = _slugify(body.name)
+    new_slug = base_slug
+    n = 1
+    while await _db.products.find_one({"slug": new_slug}, {"_id": 1}):
+        n += 1
+        new_slug = f"{base_slug}-{n}"
+
+    # Regenerate the hero image from the base product's existing images so the
+    # same bottle is reused (only the printed name / colour accent changes).
+    image_url = None
+    if body.generate_image:
+        ref_bytes = []
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+                for u in (base.get("images") or [])[:2]:
+                    if not u:
+                        continue
+                    full = u if u.startswith("http") else f"{os.environ.get('REACT_APP_BACKEND_URL', '')}{u}"
+                    try:
+                        r = await client.get(full)
+                        if r.status_code == 200 and r.content:
+                            ref_bytes.append(r.content)
+                    except Exception:
+                        pass
+        except Exception:
+            ref_bytes = []
+        ings = body.key_ingredients or base.get("key_ingredients") or ""
+        extra = f"The formula's hero actives are: {ings}." if ings else ""
+        instructions = (
+            "Keep the EXACT same bottle/jar shape, cap, proportions, size and overall packaging as the "
+            "reference image(s). Do NOT change the container. Only update the printed product name on the "
+            f"label to '{body.name}'"
+            + (f" and subtly accent the label to evoke '{body.result}'." if body.result else ".")
+        )
+        # 1) Brand's own Gemini key (direct).
+        if os.environ.get("GEMINI_API_KEY"):
+            try:
+                image_url, _bytes = await _ai_generate_product_image(
+                    body.name, brand, category, ref_images=ref_bytes or None,
+                    extra_prompt=extra, instructions=instructions)
+            except Exception as e:
+                logger.warning(f"[ai-variation] Gemini image generation failed (will try Emergent): {e}")
+                image_url = None
+        # 2) Emergent universal key fallback (Gemini image model) when Gemini
+        #    is missing/exhausted.
+        if not image_url:
+            image_url = await _ai_variation_image_emergent(body.name, brand, category, ref_bytes, ings, instructions)
+        if image_url and "res.cloudinary.com" in image_url and "/upload/" in image_url and "q_" not in image_url:
+            image_url = image_url.replace("/upload/", "/upload/q_100,f_auto/", 1)
+
+    # Fall back to copying the base images if no new image was generated.
+    images = [image_url] if image_url else list(base.get("images") or [])
+
+    product = {
+        "slug": new_slug,
+        "name": (body.name or "").strip()[:120],
+        "short_name": (body.name or "").strip()[:40],
+        "tagline": (body.tagline or base.get("tagline") or "")[:120],
+        "description": (body.description or base.get("description") or "")[:1800],
+        "category": base.get("category") or "skincare",
+        "subcategory": base.get("subcategory") or "",
+        "concerns": list(base.get("concerns") or []),
+        "niche": base.get("niche") or "skin-care",
+        "key_ingredients": (body.key_ingredients or base.get("key_ingredients") or "")[:400],
+        "ingredients_full": base.get("ingredients_full") or "",
+        "benefits": list(body.benefits or [])[:8] or list(base.get("benefits") or []),
+        "how_to_use": (body.how_to_use or base.get("how_to_use") or "")[:600],
+        "size": base.get("size") or "",
+        "images": images,
+        "image": images[0] if images else "",
+        "image_gallery": [{"url": images[0], "alt": f"{body.name} — {brand}"}] if images else [],
+        "mrp": float(base.get("mrp") or 0),
+        "prepaid_price": float(base.get("prepaid_price") or base.get("offer_price") or 0),
+        "cod_price": float(base.get("cod_price") or base.get("prepaid_price") or 0),
+        "cod_advance": float(base.get("cod_advance") or 29.0),
+        "discount_percent": float(base.get("discount_percent") or 0),
+        "offer_price": float(base.get("offer_price") or base.get("prepaid_price") or 0),
+        "badge": "", "badges": [],
+        "is_active": bool(body.is_active),
+        "is_variation": True,
+        "parent_slug": slug,
+        "variation_result": (body.result or "")[:60],
+        "sort_order": int(base.get("sort_order") or 1),
+        "stock_qty": 100,
+        "low_stock_threshold": 10,
+        "fill_card": False,
+        "brand": brand,
+        "specs": {}, "shades": [],
+        "faqs": list(base.get("faqs") or []),
+        "ai_generated": True,
+        "reviews_count": _random.randint(1020, 4875),
+        "rating": round(_random.uniform(4.5, 4.9), 1),
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    await _db.products.insert_one(product)
+    product.pop("_id", None)
+    return {"success": True, "product": product, "image_generated": bool(image_url)}
+
+
+
+# ----------------------------------------------------------------------------
 # BULK AI GENERATOR — paste many "name | ingredients | price" rows and generate
 # a full product for each, ONE AT A TIME in the background (no edge timeout, no
 # provider rate-limit stampede). Reuses the exact one-click pipeline.

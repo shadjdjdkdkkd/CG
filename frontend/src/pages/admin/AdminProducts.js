@@ -8,6 +8,7 @@ import ShadeEditor from '../../components/admin/ShadeEditor';
 import { resolveImageUrl } from '../../utils/productImage';
 import { GenerationProgress } from '../../components/admin/GenerationProgress';
 import { RegenerateImageModal } from '../../components/admin/RegenerateImageModal';
+import { AiVariationsModal } from '../../components/admin/AiVariationsModal';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -712,6 +713,7 @@ function AdminProducts() {
   const [aiStep, setAiStep] = useState('');
   const [ocInfo, setOcInfo] = useState(null);
   const [regenProduct, setRegenProduct] = useState(null);
+  const [aiVarProduct, setAiVarProduct] = useState(null);
   const [bulkGen, setBulkGen] = useState({ running: false });
   // Bulk-selection state — used by the "select multiple to delete" checkbox UX.
   const [selectedSlugs, setSelectedSlugs] = useState(new Set());
@@ -1106,6 +1108,9 @@ function AdminProducts() {
     <div className="space-y-6" data-testid="admin-products">
       {regenProduct && (
         <RegenerateImageModal product={regenProduct} headers={headers} onClose={() => setRegenProduct(null)} onApplied={() => { try { window.dispatchEvent(new Event('admin-data-changed')); } catch {} fetchAll(); }} />
+      )}
+      {aiVarProduct && (
+        <AiVariationsModal product={aiVarProduct} headers={headers} onClose={() => setAiVarProduct(null)} onCreated={() => { try { window.dispatchEvent(new Event('admin-data-changed')); } catch {} fetchAll(); }} />
       )}
       {varOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" data-testid="variation-modal">
@@ -2366,6 +2371,9 @@ function AdminProducts() {
                       {product.is_to_be_launched ? <Rocket size={16} /> : <Clock size={16} />}
                     </button>
                     <button onClick={() => setRegenProduct(product)} className="p-2 hover:bg-emerald-50 rounded-lg" title="Regenerate image with AI" data-testid={`regen-image-${product.slug}`}><Sparkles size={16} className="text-emerald-600" /></button>
+                    {!product.is_variation && (
+                      <button onClick={() => setAiVarProduct(product)} className="p-2 hover:bg-violet-50 rounded-lg" title="Generate AI variations from ingredients" data-testid={`ai-variations-${product.slug}`}><Layers size={16} className="text-violet-600" /></button>
+                    )}
                     <button onClick={() => setEditProduct({...product})} className="p-2 hover:bg-gray-100 rounded-lg" title="Edit" data-testid={`edit-${product.slug}`}><Edit size={16} className="text-gray-500" /></button>
                     <button onClick={() => toggleProductActive(product.slug, product.is_active)} className="p-2 hover:bg-gray-100 rounded-lg" title={product.is_active ? 'Deactivate' : 'Activate'}>
                       {product.is_active ? <Eye size={16} className="text-green-500" /> : <EyeOff size={16} className="text-red-500" />}
