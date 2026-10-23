@@ -22,6 +22,36 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   still had the wrong app_id at one point — user must keep Re-publish→Secrets AGORA_APP_ID =
   dde350…ce9e (NOT the certificate) so production matches, then re-publish.
 
+## 2026-10-22 — AI VARIATIONS + E-COMMERCE IMAGE GENERATOR (iteration_11)
+- Variation activation bug fixed: AdminProducts.updateProduct validated name/niche on partial
+  patches → toggleActive blocked with "Please enter a product name". Fix: __skipValidation flag on
+  toggle; control keys stripped before PUT.
+- Variations now created ACTIVE by default (frontend + CreateVariationRequest.is_active=True) and
+  build FULL image set via gallery_composer.generate_and_persist (hero + 4 formula cards +
+  certificate + before/after), bottle extracted from the generated hero.
+- AI keys: Gemini direct first; Emergent universal key fallback (LISTING_AI_KEY) since brand
+  GEMINI_API_KEY is exhausted. Applies to variation text+image and ecom images.
+- NEW: E-commerce Image Generator (/admin/ecom-images, sidebar "E-commerce Image Generator",
+  page EcomImageGenerator.js, backend POST/GET /admin/products/{slug}/ecom-images).
+  Amazon squares 1000x1000 + Flipkart tall 1179x2010 (img1 = Amazon hero identical; imgs 2+ =
+  square creative centred on tall white canvas). Brand palette (emerald/mint/slate/gold), Derma-Co
+  layout templates persisted in backend/assets/ecom_refs/*.webp fed as IMAGE 2; product's own hero
+  photo fed as IMAGE 1 (container ground truth). Images persist on product doc (ecom_images,
+  merged by slot) and reload on reopen. Per-slot prompt editor (pencil icon) saves custom prompts
+  to product.ecom_prompts (GET/PUT /ecom-prompts; empty prompt resets to default).
+- Picker uses admin-mode fetch (?active_only=false&include_variations=true) so inactive /
+  out-of-stock / variation products all appear in search (was hiding them → "product not coming
+  on search" bug).
+- Product-photo bug fix (user-reported): container was sometimes invented / textures were serum.
+  Now HARD RULES in _ecom_prompt: exact container from IMAGE 1 in every creative (except
+  how_it_works which is a pure infographic — no product, no cream), WHITE CREAM format only (never
+  liquid/serum/gel), no-image → 400 instead of generating a fake bottle. Same cream rule applied
+  to _ai_generate_product_image (master hero) + _ai_variation_image_emergent + _ft_prompt.
+- Refinements: hero slot = PURE WHITE background (both Amazon + Flipkart); how_it_works = no
+  product/cream; richness clause (layered depth, gold dividers, '+' motifs, micro-typography).
+- Verified visually: retinoid cream hero = white bg + real container + cream swatch;
+  how_it_works = infographic only; flipkart img2+ = tall centred canvas. iteration_11 = 100% pass.
+
 ## 2026-10-18 — VIDEO CALL BUG FIXED (iteration_9)
 - User reported "connection failed" even with a real doctor live. RCA: old Agora App ID was
   rejected by Agora ("invalid vendor key, can not find appid") — dead/invalid project, NOT a code bug.

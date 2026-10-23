@@ -1738,9 +1738,9 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
         "HARD RULES (non-negotiable):\n"
         "A) CONTAINER: the container shown must be EXACTLY the one from IMAGE 1 — same shape, same cap/pump, same "
         "label layout. If the template shows a different bottle (e.g. a dropper bottle), ignore it completely.\n"
-        "B) PRODUCT VISIBLE IN EVERY IMAGE: the container from IMAGE 1 must be clearly visible in this creative too "
-        "(on a pedestal, in a model's hand, or beside the texture). A listing image without the actual product is a "
-        "failure.\n"
+        "B) PRODUCT VISIBLE: the container from IMAGE 1 must be clearly visible in every creative (on a pedestal, "
+        "in a model's hand, or beside the texture) — EXCEPT the 'how it works' infographic, which shows NO product "
+        "and NO cream texture at all.\n"
         "C) FORMAT — WHITE CREAM ONLY: this product is a rich, thick, opaque WHITE CREAM. Never depict liquid, "
         "serum drops, oil, gel, water splashes or transparent fluid anywhere. Wherever the template uses a serum "
         "swatch, droplet or liquid splash, render a thick whipped WHITE CREAM smear, swirl or dollop with soft peaks "
@@ -1751,16 +1751,21 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
         "E) REMOVE every 'The Derma Co' logo, cross-pill badge and all competitor text. The only brand shown is "
         "'CELESTA GLOW'.\n"
         "F) 1:1 SQUARE, ultra-high resolution, perfectly sharp legible typography, generous whitespace, premium "
-        "cosmetic-advertising finish.\n\n"
+        "cosmetic-advertising finish. RICHNESS: layered depth (foreground/background separation), soft realistic "
+        "shadows and studio reflections, refined thin gold divider lines, small '+' motif accents, and polished "
+        "micro-typography (eyebrow labels, fine print) so the creative feels like a top-tier Derma-Co-class ad, "
+        "never flat or basic.\n\n"
         f"PRODUCT: '{name}' — {ptype} (white cream formula). Hero actives: {', '.join(acts) or ings or 'clinically-proven actives'}.\n\n"
     )
     if slot == "hero":
         return head + (
-            "THIS IMAGE (hero): the container from IMAGE 1 on the left resting over a large, thick, opaque WHITE CREAM "
-            "swatch circle (whipped cream texture with soft peaks — NOT translucent serum); on the right a large bold "
-            f"2-3 line headline '{headline}' with the key word emphasised in emerald green, a thin horizontal divider "
-            "ending in a small green '+' mark, and a rounded emerald pill badge reading 'DERMATOLOGIST TESTED'. Airy "
-            "near-white/mint background."
+            "THIS IMAGE (hero): PURE WHITE (#FFFFFF) seamless background — no mint, no tint, no gradient, no shadow "
+            "wash; the container from IMAGE 1 stands on the left, tall and centred vertically, with a large thick "
+            "opaque WHITE CREAM swatch (whipped texture, soft peaks) sweeping behind it for depth; on the right a "
+            f"large bold 2-3 line headline '{headline}' with the key word emphasised in emerald green, a thin "
+            "horizontal divider ending in a small green '+' mark, and a rounded emerald pill badge reading "
+            "'DERMATOLOGIST TESTED'. Rich finish: crisp studio reflections on the container, subtle gold accent "
+            "line, immaculate whitespace."
         )
     if slot == "ingredients":
         lines = acts or ["Active 1", "Active 2", "Active 3"]
@@ -1773,11 +1778,13 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
         )
     if slot == "how_it_works":
         return head + (
-            "THIS IMAGE (how it works): bold emerald headline 'Deep Absorption Formula' with divider + '+' mark; a "
-            "rounded emerald stat pill reading 'Up to 2x better absorption*'; below it a photoreal split skin "
-            f"cross-section comparison labelled 'ORDINARY {ptype.upper()}' vs 'CELESTA GLOW' — on the Celesta Glow side "
-            "show a rich WHITE CREAM melting deep into the skin layers (green glow accents). The container from "
-            "IMAGE 1 sits at one corner."
+            "THIS IMAGE (how it works): a PURE INFOGRAPHIC — absolutely NO product container and NO cream/texture "
+            "swatch in this one. Bold emerald headline 'Deep Absorption Formula' with a thin divider + '+' mark; a "
+            "rounded emerald stat pill reading 'Up to 2x better absorption*'; below it a rich photoreal split skin "
+            f"cross-section comparison labelled 'ORDINARY {ptype.upper()}' vs 'CELESTA GLOW' — the Celesta Glow side "
+            "shows luminous emerald-gold micro-capsules travelling deep through glowing skin layers; the ordinary "
+            "side shows them sitting on the surface. Rich layered skin illustration, soft depth, clean white/mint "
+            "surround."
         )
     if slot == "who_for":
         bl = benefits[:3] or ["All skin types", "Daily use", "Dermatologist approved"]
