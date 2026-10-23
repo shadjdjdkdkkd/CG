@@ -22,6 +22,18 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   still had the wrong app_id at one point — user must keep Re-publish→Secrets AGORA_APP_ID =
   dde350…ce9e (NOT the certificate) so production matches, then re-publish.
 
+## 2026-10-23 — VIDEO CALLS SWITCHED TO FREE JITSI (production fix)
+- User still saw "Connection failed" on LIVE celestaglow.com because production's Agora secret
+  still held the wrong value, and agora_service.configured() was true so it never fell back.
+- Per user request ("use any free service"): room endpoint (mp_ops.py GET /consultations/{id}/room)
+  now honours VIDEO_PROVIDER env (default "jitsi"). Only uses Agora when VIDEO_PROVIDER=agora AND
+  configured; otherwise returns provider=jitsi (meet.jit.si, no keys). Default = jitsi → works on
+  preview AND production with zero credentials, immediately after deploy.
+- Frontend already renders the Jitsi iframe; improved iframe config (disableDeepLinking,
+  no prejoin, autoplay) for mobile. Verified in a real browser: room loads, camera works
+  ("Your devices are working properly"), End call present — no connection-failed error.
+- To go back to Agora later: set VIDEO_PROVIDER=agora and ensure valid AGORA_APP_ID/CERTIFICATE.
+
 ## 2026-10-22 — AI VARIATIONS + E-COMMERCE IMAGE GENERATOR (iteration_11)
 - Variation activation bug fixed: AdminProducts.updateProduct validated name/niche on partial
   patches → toggleActive blocked with "Please enter a product name". Fix: __skipValidation flag on

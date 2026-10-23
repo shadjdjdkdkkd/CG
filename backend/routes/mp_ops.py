@@ -4,6 +4,7 @@ import base64
 import datetime as dt
 import io
 import logging
+import os
 import secrets
 from typing import Any, Dict, List, Optional
 
@@ -465,7 +466,10 @@ async def consult_room(booking_id: str, authorization: str = Header(None), email
     if b["status"] not in ("confirmed", "in_progress", "completion_pending", "completed"):
         raise HTTPException(400, f"Consultation is {b['status']} — the room opens for confirmed bookings")
     from services import agora_service
-    if agora_service.configured():
+    # Default to free Jitsi (no keys, works everywhere). Set VIDEO_PROVIDER=agora
+    # to use Agora once valid production credentials are in place.
+    video_provider = os.environ.get("VIDEO_PROVIDER", "jitsi").lower()
+    if video_provider == "agora" and agora_service.configured():
         uid_ = 1001 if role == "doctor" else 2002
         channel = f"cg_{booking_id.lower()}_{b.get('room_secret', '')}"
         return {"provider": "agora", **agora_service.rtc_token(channel, uid_),

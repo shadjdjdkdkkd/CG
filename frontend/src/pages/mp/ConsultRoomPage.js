@@ -97,8 +97,8 @@ const ConsultRoomPage = () => {
               </div>
             ) : (
               <div className="rounded-3xl overflow-hidden border border-stone-700" data-testid="jitsi-frame">
-                <iframe title="Video consultation" width="100%" height="560" allow="camera; microphone; fullscreen; display-capture"
-                  src={`https://${room.domain}/${room.room}#config.prejoinPageEnabled=false`} />
+                <iframe title="Video consultation" width="100%" height="560" allow="camera; microphone; fullscreen; display-capture; autoplay"
+                  src={`https://${room.domain}/${room.room}#config.prejoinPageEnabled=false&config.disableDeepLinking=true&config.startWithAudioMuted=false`} />
               </div>
             )}
             {room.provider !== 'agora' && <div className="flex justify-center">
