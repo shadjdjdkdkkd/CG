@@ -49,6 +49,9 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   to _ai_generate_product_image (master hero) + _ai_variation_image_emergent + _ft_prompt.
 - Refinements: hero slot = PURE WHITE background (both Amazon + Flipkart); how_it_works = no
   product/cream; richness clause (layered depth, gold dividers, '+' motifs, micro-typography).
+- Refinement 2: gradient typography — rule G in _ecom_prompt makes every headline/stat a smooth
+  vertical emerald→bright-green gradient with gold shimmer, neatly stacked/aligned, clear of
+  product and edges; supporting text stays flat slate. Verified on hero + results creatives.
 - Verified visually: retinoid cream hero = white bg + real container + cream swatch;
   how_it_works = infographic only; flipkart img2+ = tall centred canvas. iteration_11 = 100% pass.
 

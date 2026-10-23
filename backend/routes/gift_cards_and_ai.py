@@ -1754,7 +1754,13 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
         "cosmetic-advertising finish. RICHNESS: layered depth (foreground/background separation), soft realistic "
         "shadows and studio reflections, refined thin gold divider lines, small '+' motif accents, and polished "
         "micro-typography (eyebrow labels, fine print) so the creative feels like a top-tier Derma-Co-class ad, "
-        "never flat or basic.\n\n"
+        "never flat or basic.\n"
+        "G) GRADIENT TYPOGRAPHY: every big headline and stat number is typeset in a smooth vertical GRADIENT that "
+        "melts from deep emerald #16A34A at the top into brighter green #22C55E with a hint of gold #FACC15 shimmer "
+        "toward the bottom (like premium foil lettering). Headlines are left-aligned (or centred if the template "
+        "centres them), stacked neatly with tight even line spacing, optically balanced in their zone — never "
+        "touching the product, badges or image edges, never cramped, never floating in dead space. Supporting text "
+        "stays flat dark slate #1E293B for contrast.\n\n"
         f"PRODUCT: '{name}' — {ptype} (white cream formula). Hero actives: {', '.join(acts) or ings or 'clinically-proven actives'}.\n\n"
     )
     if slot == "hero":
@@ -1762,10 +1768,11 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
             "THIS IMAGE (hero): PURE WHITE (#FFFFFF) seamless background — no mint, no tint, no gradient, no shadow "
             "wash; the container from IMAGE 1 stands on the left, tall and centred vertically, with a large thick "
             "opaque WHITE CREAM swatch (whipped texture, soft peaks) sweeping behind it for depth; on the right a "
-            f"large bold 2-3 line headline '{headline}' with the key word emphasised in emerald green, a thin "
-            "horizontal divider ending in a small green '+' mark, and a rounded emerald pill badge reading "
-            "'DERMATOLOGIST TESTED'. Rich finish: crisp studio reflections on the container, subtle gold accent "
-            "line, immaculate whitespace."
+            f"large bold 2-3 line headline '{headline}' typeset in the emerald-to-bright-green gradient with a soft "
+            "gold shimmer (per rule G), stacked neatly with tight even line spacing, a thin gold divider ending in a "
+            "small green '+' mark, and a rounded emerald pill badge reading 'DERMATOLOGIST TESTED'. Rich finish: "
+            "crisp studio reflections on the container, immaculate whitespace, headline optically centred in the "
+            "right zone with clear air around it."
         )
     if slot == "ingredients":
         lines = acts or ["Active 1", "Active 2", "Active 3"]
@@ -1779,8 +1786,9 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
     if slot == "how_it_works":
         return head + (
             "THIS IMAGE (how it works): a PURE INFOGRAPHIC — absolutely NO product container and NO cream/texture "
-            "swatch in this one. Bold emerald headline 'Deep Absorption Formula' with a thin divider + '+' mark; a "
-            "rounded emerald stat pill reading 'Up to 2x better absorption*'; below it a rich photoreal split skin "
+            "swatch in this one. Bold gradient-green headline 'Deep Absorption Formula' (per rule G), centred neatly "
+            "at the top with a thin gold divider + '+' mark; a rounded emerald stat pill reading 'Up to 2x better "
+            "absorption*'; below it a rich photoreal split skin "
             f"cross-section comparison labelled 'ORDINARY {ptype.upper()}' vs 'CELESTA GLOW' — the Celesta Glow side "
             "shows luminous emerald-gold micro-capsules travelling deep through glowing skin layers; the ordinary "
             "side shows them sitting on the surface. Rich layered skin illustration, soft depth, clean white/mint "
@@ -1789,8 +1797,8 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
     if slot == "who_for":
         bl = benefits[:3] or ["All skin types", "Daily use", "Dermatologist approved"]
         return head + (
-            "THIS IMAGE (who is it for): left side a bold emerald headline 'Who Is It For?' with a divider, then 2-3 "
-            "green toggle-style bullet rows: " + "; ".join(bl) + ". Right side a smiling young Indian woman with "
+            "THIS IMAGE (who is it for): left side a bold gradient-green headline 'Who Is It For?' (per rule G) with "
+            "a thin gold divider, then 2-3 green toggle-style bullet rows neatly aligned under it: " + "; ".join(bl) + ". Right side a smiling young Indian woman with "
             "glowing skin holding the EXACT container from IMAGE 1 near her face, with a small dab of white cream on "
             "her cheek. Soft light-mint studio background."
         )
@@ -1799,8 +1807,8 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
         return head + (
             "THIS IMAGE (results): an extreme beauty close-up of a young Indian woman's flawless glowing face filling "
             "the frame, holding the EXACT container from IMAGE 1 near her cheek on the right. On the left a very large "
-            f"bold emerald statistic '{stat}' then in slate text 'users saw {result} in 3 weeks*', and a small grey "
-            "disclaimer line at the bottom 'When used regularly. Based on a consumer survey.'"
+            f"bold gradient-green statistic '{stat}' (per rule G) then in slate text 'users saw {result} in 3 weeks*', "
+            "and a small grey disclaimer line at the bottom 'When used regularly. Based on a consumer survey.'"
         )
     return head
 
