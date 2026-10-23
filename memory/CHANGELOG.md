@@ -52,6 +52,9 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
 - Refinement 2: gradient typography — rule G in _ecom_prompt makes every headline/stat a smooth
   vertical emerald→bright-green gradient with gold shimmer, neatly stacked/aligned, clear of
   product and edges; supporting text stays flat slate. Verified on hero + results creatives.
+- Refinement 3: hero headline limited to 1-4 meaningful words (distilled from benefit/result,
+  no other text blocks); results claim must be a grammatically perfect 6-9 word sentence composed
+  from the product's benefit (fixes garbled "users saw barrier-brighter skin" text).
 - Verified visually: retinoid cream hero = white bg + real container + cream swatch;
   how_it_works = infographic only; flipkart img2+ = tall centred canvas. iteration_11 = 100% pass.
 

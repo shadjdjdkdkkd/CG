@@ -1767,10 +1767,13 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
         return head + (
             "THIS IMAGE (hero): PURE WHITE (#FFFFFF) seamless background — no mint, no tint, no gradient, no shadow "
             "wash; the container from IMAGE 1 stands on the left, tall and centred vertically, with a large thick "
-            "opaque WHITE CREAM swatch (whipped texture, soft peaks) sweeping behind it for depth; on the right a "
-            f"large bold 2-3 line headline '{headline}' typeset in the emerald-to-bright-green gradient with a soft "
+            "opaque WHITE CREAM swatch (whipped texture, soft peaks) sweeping behind it for depth; on the right ONE "
+            f"short bold headline of 1-4 WORDS MAX — distill the benefit '{headline}' into the shortest meaningful, "
+            "logical phrase that connects to the product (e.g. 'Fades Dark Spots', 'Brightens Skin', 'Ageless Glow', "
+            "'Deep Hydration') — typeset in the emerald-to-bright-green gradient with a soft "
             "gold shimmer (per rule G), stacked neatly with tight even line spacing, a thin gold divider ending in a "
-            "small green '+' mark, and a rounded emerald pill badge reading 'DERMATOLOGIST TESTED'. Rich finish: "
+            "small green '+' mark, and a rounded emerald pill badge reading 'DERMATOLOGIST TESTED'. NO other text "
+            "blocks, paragraphs or benefit lists — headline + divider + badge only. Rich finish: "
             "crisp studio reflections on the container, immaculate whitespace, headline optically centred in the "
             "right zone with clear air around it."
         )
@@ -1804,11 +1807,15 @@ def _ecom_prompt(slot: str, prod: dict) -> str:
         )
     if slot == "results":
         stat = "98%"
+        clean_result = (result or "visible improvement").replace("-", " ").replace("_", " ").strip()
         return head + (
             "THIS IMAGE (results): an extreme beauty close-up of a young Indian woman's flawless glowing face filling "
             "the frame, holding the EXACT container from IMAGE 1 near her cheek on the right. On the left a very large "
-            f"bold gradient-green statistic '{stat}' (per rule G) then in slate text 'users saw {result} in 3 weeks*', "
-            "and a small grey disclaimer line at the bottom 'When used regularly. Based on a consumer survey.'"
+            f"bold gradient-green statistic '{stat}' (per rule G). Under it ONE short, GRAMMATICALLY PERFECT claim "
+            "sentence of 6-9 words max in slate text — compose it properly from the product's result "
+            f"('{clean_result}') and benefit ('{headline}'), e.g. 'saw visibly brighter skin in 3 weeks*' or "
+            "'noticed fewer fine lines in 4 weeks*' — never concatenate raw labels, never broken grammar. Below it a "
+            "small grey disclaimer line: 'When used regularly. Based on a consumer survey.'"
         )
     return head
 
