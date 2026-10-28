@@ -3719,6 +3719,14 @@ async def startup_seed():
     except Exception as e:
         logging.error(f"Failed to hydrate active admin hash: {e}")
 
+    # Resume any bulk-gen job whose worker died with a previous pod (restart /
+    # scale-down). The item queue + next_index live in Mongo, so we pick up
+    # exactly where the dead worker stopped instead of the batch freezing.
+    try:
+        await gift_cards_routes.resume_interrupted_bulk_jobs()
+    except Exception as e:
+        logging.error(f"Failed to resume interrupted bulk jobs: {e}")
+
     # Fast: visitor-tracking TTL index
     try:
         await _visitor_tracking.ensure_indexes()

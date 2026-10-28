@@ -2074,20 +2074,25 @@ async def bulk_generate_products(
     items = [it for it in (body.items or []) if (it.name or "").strip()]
     if not items:
         raise HTTPException(status_code=400, detail="No valid product rows provided")
-    if not (os.environ.get("GEMINI_API_KEY") or os.environ.get("EMERGENT_LLM_KEY")):
+    if not os.environ.get("GEMINI_API_KEY"):
+        # The copy step (services.llm_helper.llm_text) uses GEMINI_API_KEY only.
         raise HTTPException(status_code=503, detail="No AI key configured (set GEMINI_API_KEY)")
 
     import asyncio as _aio
     job_id = f"bulk_{uuid.uuid4().hex[:10]}"
     _bulk_gen_jobs[job_id] = {
-        "job_id": job_id, "status": "running", "total": len(items),
+        "job_id": job_id, "kind": "bulk_gen", "status": "running", "total": len(items),
         "done": 0, "failed": 0, "current": None, "step": "queued",
         "created": [], "errors": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
+        # Durable queue + params so the batch survives a pod restart / scale-down
+        # (the in-memory task dies with the pod; this lets a fresh worker resume it).
+        "items": [it.dict() for it in items],
+        "brand": body.brand or "Celesta Glow",
+        "generate_image": bool(body.generate_image),
+        "next_index": 0,
     }
-    _aio.create_task(_bulk_generate_worker(job_id, body, items))
-    from services.job_store import start_mirror
-    start_mirror(_db, _bulk_gen_jobs[job_id])
+    _launch_bulk_worker(job_id, body, items, 0)
     return {"success": True, "job_id": job_id, "total": len(items), "status": "running"}
 
 
@@ -2105,37 +2110,139 @@ async def bulk_generate_job(
     return job
 
 
-async def _bulk_generate_worker(job_id: str, body: BulkGenerateRequest, items: list):
+# Strong references to running bulk tasks — asyncio only keeps WEAK refs to
+# tasks, so an un-referenced long-running worker can be garbage-collected
+# mid-batch (silently stopping after an item).
+_bulk_gen_tasks: set = set()
+
+# Hard cap per product so ONE hung AI/image call can never freeze the batch.
+_BULK_ITEM_TIMEOUT_S = int(os.environ.get("BULK_GEN_ITEM_TIMEOUT_S", "480"))
+
+
+def _launch_bulk_worker(job_id: str, body: "BulkGenerateRequest", items: list, start_index: int = 0):
+    """Create + track the background worker task and its Mongo mirror."""
     import asyncio as _aio
+    from services.job_store import start_mirror
+    _t = _aio.create_task(_bulk_generate_worker(job_id, body, items, start_index))
+    _bulk_gen_tasks.add(_t)
+    _t.add_done_callback(_bulk_gen_tasks.discard)
+    start_mirror(_db, _bulk_gen_jobs[job_id])
+
+
+async def _bulk_generate_worker(job_id: str, body: "BulkGenerateRequest", items: list, start_index: int = 0):
+    import asyncio as _aio
+    from services.job_store import save_job
     job = _bulk_gen_jobs[job_id]
-    for it in items:
-        job["current"] = it.name
-        sub = {"step": "queued"}
-        job["item"] = sub
-        req = OneClickProductRequest(
-            name=it.name, brand=body.brand or "Celesta Glow",
-            key_ingredients=it.key_ingredients or "",
-            generate_image=body.generate_image,
-            price_min=it.price_min, price_max=it.price_max,
-            extra_specs=it.extra_specs,
-        )
+    try:
+        for idx in range(start_index, len(items)):
+            it = items[idx]
+            job["current"] = it.name
+            job["index"] = idx + 1
+            job["next_index"] = idx  # resume point if the pod dies mid-item
+            sub = {"step": "queued"}
+            job["item"] = sub
+            # Persist the resume point BEFORE starting the item so a crash
+            # resumes AT this item (never skips it).
+            try:
+                await save_job(_db, job)
+            except Exception:
+                pass
+            try:
+                req = OneClickProductRequest(
+                    name=it.name, brand=body.brand or "Celesta Glow",
+                    key_ingredients=it.key_ingredients or "",
+                    generate_image=body.generate_image,
+                    price_min=it.price_min, price_max=it.price_max,
+                    extra_specs=it.extra_specs,
+                )
+                res = await _aio.wait_for(_one_click_impl(sub, req), timeout=_BULK_ITEM_TIMEOUT_S)
+                prod = (res or {}).get("product") or {}
+                job["created"].append({"name": prod.get("name") or it.name, "slug": res.get("slug") or prod.get("slug"), "image_generated": res.get("image_generated", False)})
+                job["done"] += 1
+                logger.info(f"[bulk-gen] {job_id} item {idx + 1}/{job['total']} '{it.name}' created")
+            except _aio.CancelledError:
+                # A library-internal cancellation must not kill the whole batch.
+                # Only re-raise if THIS worker task itself is being cancelled.
+                cur = _aio.current_task()
+                if cur is not None and cur.cancelling():
+                    raise
+                logger.warning(f"[bulk-gen] '{it.name}' was cancelled internally — skipping")
+                job["errors"].append({"name": it.name, "error": "Generation was interrupted"})
+                job["failed"] += 1
+            except _aio.TimeoutError:
+                logger.warning(f"[bulk-gen] '{it.name}' timed out after {_BULK_ITEM_TIMEOUT_S}s — skipping")
+                job["errors"].append({"name": it.name, "error": f"Timed out after {_BULK_ITEM_TIMEOUT_S}s"})
+                job["failed"] += 1
+            except Exception as e:
+                detail = getattr(e, "detail", None) or str(e)
+                logger.exception(f"[bulk-gen] '{it.name}' failed: {detail}")
+                job["errors"].append({"name": it.name, "error": str(detail)[:200]})
+                job["failed"] += 1
+            job["next_index"] = idx + 1  # item fully handled — move resume point forward
+            job["step"] = f"{job['done'] + job['failed']}/{job['total']}"
+            try:
+                await save_job(_db, job)
+            except Exception:
+                pass
+            # Gentle pacing so we never hammer the image/LLM provider.
+            await _aio.sleep(1.0)
+        job["status"] = "done"
+    except BaseException as e:  # noqa: BLE001 — always finalise the job record
+        logger.exception(f"[bulk-gen] job {job_id} aborted: {e!r}")
+        job["status"] = "failed"
+        job["error"] = f"Bulk job stopped unexpectedly: {str(e)[:200] or type(e).__name__}"
+        if isinstance(e, (KeyboardInterrupt, SystemExit)):
+            raise
+    finally:
+        job["current"] = None
+        job["step"] = "done"
+        job["finished_at"] = datetime.now(timezone.utc).isoformat()
         try:
-            res = await _one_click_impl(sub, req)
-            prod = (res or {}).get("product") or {}
-            job["created"].append({"name": prod.get("name") or it.name, "slug": res.get("slug") or prod.get("slug"), "image_generated": res.get("image_generated", False)})
-            job["done"] += 1
+            await save_job(_db, job)
+        except BaseException:
+            pass
+
+
+
+
+async def resume_interrupted_bulk_jobs():
+    """On startup, resume any bulk-gen job whose worker died with its pod.
+
+    The item queue + `next_index` are persisted in Mongo (`ai_jobs`), so a fresh
+    pod can rebuild the request and continue from exactly where the previous
+    worker stopped — instead of the batch freezing at e.g. 1/23 forever.
+    """
+    if _db is None:
+        return
+    try:
+        cursor = _db.ai_jobs.find({"kind": "bulk_gen", "status": "running"}, {"_id": 0})
+        docs = await cursor.to_list(length=50)
+    except Exception as e:
+        logger.warning(f"[bulk-gen] resume scan failed: {e}")
+        return
+    for doc in docs:
+        job_id = doc.get("job_id")
+        if not job_id:
+            continue
+        try:
+            items = [BulkGenItem(**it) for it in (doc.get("items") or [])]
+            if not items:
+                continue
+            nxt = int(doc.get("next_index") or 0)
+            if nxt >= len(items):
+                # Everything already processed — just finalise the record.
+                await _db.ai_jobs.update_one({"job_id": job_id}, {"$set": {"status": "done", "step": "done"}})
+                continue
+            body = BulkGenerateRequest(items=items, brand=doc.get("brand") or "Celesta Glow",
+                                       generate_image=bool(doc.get("generate_image", True)))
+            # Rehydrate the in-memory job so the polling endpoint + mirror see it.
+            doc.pop("_synced_at", None)
+            doc["status"] = "running"
+            _bulk_gen_jobs[job_id] = doc
+            _launch_bulk_worker(job_id, body, items, nxt)
+            logger.info(f"[bulk-gen] RESUMED interrupted job {job_id} at item {nxt + 1}/{len(items)}")
         except Exception as e:
-            logger.exception(f"[bulk-gen] '{it.name}' failed: {e}")
-            job["errors"].append({"name": it.name, "error": str(e)[:200]})
-            job["failed"] += 1
-        job["step"] = f"{job['done'] + job['failed']}/{job['total']}"
-        # Gentle pacing so we never hammer the image/LLM provider.
-        await _aio.sleep(1.0)
-    job["current"] = None
-    job["status"] = "done"
-    job["step"] = "done"
-
-
+            logger.warning(f"[bulk-gen] failed to resume {job_id}: {e}")
 
 
 async def _one_click_worker(job_id: str, body: OneClickProductRequest):

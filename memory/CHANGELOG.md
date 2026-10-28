@@ -34,6 +34,28 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   ("Your devices are working properly"), End call present — no connection-failed error.
 - To go back to Agora later: set VIDEO_PROVIDER=agora and ensure valid AGORA_APP_ID/CERTIFICATE.
 
+
+## 2026-10-28 — BULK GENERATOR DURABILITY FIX (stall-after-1 + constant refresh)
+- Reported: bulk AI generate stops after product 1; admin screen refreshes every ~1.5s during a run.
+- Bifrost fixed the constant refresh (frontend/src/pages/admin/AdminProducts.js): poll every 2.5s,
+  update progress panel only on change, reload the product list ONCE at completion with
+  fetchAll({silent:true}) (no full-page spinner), retry transient poll errors, no 30-min cutoff,
+  remember job_id so a page reload resumes the panel.
+- Deployer RCA (proven on live): the bulk job was a fire-and-forget in-memory asyncio task; pod
+  liveness-kill (nginx /health 1s) and idle scale-down 2->1 destroyed it -> batch froze (1/23).
+- Fix (gift_cards_and_ai.py): job now persists the FULL item queue + brand + generate_image +
+  next_index to Mongo (ai_jobs) under kind="bulk_gen". Worker takes start_index, saves the resume
+  point BEFORE and AFTER each item, and finalises via save_job. New _launch_bulk_worker() holds a
+  strong task ref. New resume_interrupted_bulk_jobs() runs on startup (server.py startup_seed) and
+  rehydrates any status=running bulk_gen job, rebuilding BulkGenItem list and resuming from
+  next_index. Verified: seeded a running job at 1/3, resume completed items 2,3 without redoing 1.
+- Also added missing services/ai_content_generator.generate_product_reviews (was imported by
+  gift_cards_and_ai + products but never defined -> every product create threw). AI-first with a
+  deterministic template fallback so it never blocks a batch or burns credits when key is exhausted.
+- CONSTRAINTS TO KEEP: never reload list / dispatch admin-data-changed inside the poll loop; any
+  reload during a running job must use fetchAll({silent:true}); never re-add a fixed time cutoff that
+  abandons long batches; bulk worker must stay durable (queue+next_index in Mongo) — do not revert to
+  a bare in-memory asyncio.create_task without persistence.
 ## 2026-10-22 — AI VARIATIONS + E-COMMERCE IMAGE GENERATOR (iteration_11)
 - Variation activation bug fixed: AdminProducts.updateProduct validated name/niche on partial
   patches → toggleActive blocked with "Please enter a product name". Fix: __skipValidation flag on

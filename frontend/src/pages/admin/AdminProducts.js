@@ -742,8 +742,11 @@ function AdminProducts() {
 
   const headers = { 'X-Admin-Token': adminToken };
 
-  const fetchAll = async () => {
-    setLoading(true);
+  const fetchAll = async (opts = {}) => {
+    // `silent` refreshes the data in place WITHOUT swapping the whole page for
+    // the loading spinner (used after background jobs like Bulk AI Generate).
+    const silent = opts && opts.silent === true;
+    if (!silent) setLoading(true);
     try {
       // Use allSettled so a single 401 (e.g. employees lacking access to
       // /admin/coupons) doesn't blank out the entire products list.
@@ -778,6 +781,72 @@ function AdminProducts() {
     if (!adminToken) { navigate('/admin'); return; }
     fetchAll();
   }, [imagesFirst]);
+
+  // ---- Bulk AI Generate: poll the background job WITHOUT re-rendering the
+  // whole page each tick. The product list is refreshed once, silently, when
+  // the job finishes. The job id is remembered so a page reload resumes the
+  // progress panel instead of losing track of a still-running batch.
+  const bulkPollingRef = useRef(false);
+  const BULK_JOB_KEY = 'cg_bulk_gen_job';
+  const pollBulkJob = async (jobId, total, startedAt) => {
+    if (bulkPollingRef.current) return;
+    bulkPollingRef.current = true;
+    setBulkGen({ running: true, done: 0, failed: 0, total, current: null, step: 'queued', startedAt: startedAt || Date.now() });
+    let job = null;
+    let errStreak = 0;
+    let lastDone = -1;
+    try {
+      // No fixed deadline — a 100-product batch can take well over an hour.
+      // Stop only when the server says the job is finished (or it is gone).
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        await new Promise(r => setTimeout(r, 2500));
+        let j;
+        try {
+          ({ data: j } = await axios.get(`${API}/admin/ai/bulk-generate-job/${jobId}`, { headers }));
+          errStreak = 0;
+        } catch (e) {
+          // Transient network / gateway errors must NOT abort the batch view —
+          // the backend keeps generating regardless. Give up only on 404.
+          errStreak += 1;
+          if (e.response?.status === 404 && errStreak >= 3) { job = { status: 'failed', error: 'Job not found' }; break; }
+          await new Promise(r => setTimeout(r, Math.min(15000, 2000 * errStreak)));
+          continue;
+        }
+        job = j;
+        const processed = (j.done ?? 0) + (j.failed ?? 0);
+        // Only push state when something visible actually changed.
+        setBulkGen(prev => {
+          const next = { ...prev, running: j.status === 'running', done: j.done ?? 0, failed: j.failed ?? 0, total: j.total ?? prev.total, current: j.current, step: j.item?.step || 'queued' };
+          return (prev.done === next.done && prev.failed === next.failed && prev.current === next.current && prev.step === next.step && prev.total === next.total && prev.running === next.running) ? prev : next;
+        });
+        lastDone = processed;
+        if (j.status !== 'running' && j.status !== 'queued') break;
+      }
+      try { localStorage.removeItem(BULK_JOB_KEY); } catch {}
+      const created = (job?.created || []).length;
+      const failed = (job?.failed || 0);
+      try { window.dispatchEvent(new Event('admin-data-changed')); } catch {}
+      fetchAll({ silent: true });
+      alert(`✅ Bulk generation complete.\n\nCreated: ${created}\nFailed: ${failed}` +
+        (job?.error ? `\n\n${job.error}` : '') +
+        (job?.errors?.length ? `\n\nErrors:\n${job.errors.map(e => `• ${e.name}: ${e.error}`).join('\n')}` : ''));
+    } finally {
+      bulkPollingRef.current = false;
+      setBulkGen({ running: false });
+    }
+    return lastDone;
+  };
+
+  // Resume an in-flight bulk job after a page reload / navigation.
+  useEffect(() => {
+    if (!adminToken) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(BULK_JOB_KEY) || 'null');
+      if (saved?.jobId) pollBulkJob(saved.jobId, saved.total || 0, saved.startedAt);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Refresh taxonomy (concerns/categories/subcategories) every time the product
   // modal opens. Admins often add a new concern or subcategory in another tab
@@ -1364,31 +1433,18 @@ function AdminProducts() {
               if (!items.length) { alert('No valid rows found'); return; }
               if (!window.confirm(`Generate ${items.length} product(s) with AI? This runs in the background, one at a time.`)) return;
               setBulkGen({ running: true, done: 0, failed: 0, total: items.length, current: items[0].name, step: 'queued', startedAt: Date.now() });
+              let data;
               try {
-                const { data } = await axios.post(`${API}/admin/ai/bulk-generate`, { items, brand: 'Celesta Glow', generate_image: true }, { headers });
-                if (!data?.job_id) { alert('Failed to start bulk generation'); setBulkGen({ running: false }); return; }
-                const jobId = data.job_id;
-                const deadline = Date.now() + 30 * 60 * 1000;
-                let job = null;
-                while (Date.now() < deadline) {
-                  await new Promise(r => setTimeout(r, 1500));
-                  const { data: j } = await axios.get(`${API}/admin/ai/bulk-generate-job/${jobId}`, { headers });
-                  job = j;
-                  setBulkGen(prev => ({ ...prev, running: j.status === 'running', done: j.done ?? 0, failed: j.failed ?? 0, total: j.total ?? prev.total, current: j.current, step: j.item?.step || 'queued' }));
-                  if (j.status !== 'running') break;
-                  try { window.dispatchEvent(new Event('admin-data-changed')); } catch {}
-                  fetchAll();
-                }
-                const created = (job?.created || []).length;
-                const failed = (job?.failed || 0);
-                alert(`✅ Bulk generation complete.\n\nCreated: ${created}\nFailed: ${failed}` + (job?.errors?.length ? `\n\nErrors:\n${job.errors.map(e => `• ${e.name}: ${e.error}`).join('\n')}` : ''));
-                try { window.dispatchEvent(new Event('admin-data-changed')); } catch {}
-                fetchAll();
+                ({ data } = await axios.post(`${API}/admin/ai/bulk-generate`, { items, brand: 'Celesta Glow', generate_image: true }, { headers }));
               } catch (e) {
-                alert(e.response?.data?.detail || 'Bulk generation failed');
-              } finally {
+                alert(e.response?.data?.detail || 'Bulk generation failed to start');
                 setBulkGen({ running: false });
+                return;
               }
+              if (!data?.job_id) { alert('Failed to start bulk generation'); setBulkGen({ running: false }); return; }
+              const startedAt = Date.now();
+              try { localStorage.setItem(BULK_JOB_KEY, JSON.stringify({ jobId: data.job_id, total: items.length, startedAt })); } catch {}
+              await pollBulkJob(data.job_id, items.length, startedAt);
             }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 disabled:opacity-60 text-white text-sm font-bold shadow-md hover:shadow-lg"
             data-testid="bulk-ai-generate-btn"

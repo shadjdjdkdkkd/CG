@@ -260,3 +260,72 @@ Current date context: {current_day}, {current_date}"""
                 "success": False,
                 "error": str(e)
             }
+
+
+
+# --- Module-level helper used by product creation routes ---------------------
+_REVIEW_NAMES = [
+    "Priya S.", "Riya M.", "Anjali K.", "Sneha R.", "Kavya P.", "Neha T.",
+    "Meera J.", "Ishita R.", "Divya M.", "Tanvi K.", "Pooja G.", "Shruti V.",
+]
+_REVIEW_CITIES = ["Mumbai", "Delhi", "Bengaluru", "Hyderabad", "Pune", "Chennai", "Jaipur", "Kolkata"]
+
+
+async def generate_product_reviews(name: str, niche: str = "skincare",
+                                   key_ingredients: str = "", benefits: list = None) -> list:
+    """Generate a small set of personalised product reviews.
+
+    Tries the AI first; on any failure (e.g. exhausted key) falls back to a
+    deterministic, product-tailored template set so product creation NEVER
+    breaks and never burns extra credits. Returns a list of review dicts.
+    """
+    import random as _r
+    benefits = benefits or []
+
+    def _mk(body: str) -> dict:
+        return {
+            "id": uuid.uuid4().hex[:12],
+            "name": _r.choice(_REVIEW_NAMES),
+            "location": _r.choice(_REVIEW_CITIES),
+            "rating": 5 if _r.random() < 0.85 else 4,
+            "body": body,
+            "tag": niche or "skincare",
+            "days": _r.randint(7, 90),
+            "age": _r.choice([None, 25, 28, 31, 34, 38, 42, 45]),
+            "verified": True,
+        }
+
+    benefit_txt = (benefits[0] if benefits else "healthier skin")
+    # AI attempt (best-effort; cheap single text call)
+    api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY')
+    if api_key:
+        try:
+            chat = GeminiChat(
+                api_key=api_key,
+                session_id=f"rev-{uuid.uuid4().hex[:8]}",
+                system_message="You write short, genuine-sounding product reviews.",
+            ).with_model("gemini", "gemini-2.5-flash")
+            prompt = (
+                f"Write 4 short, realistic, positive customer reviews (1-2 sentences each) for the Indian "
+                f"skincare product '{name}' (key ingredients: {key_ingredients or 'gentle actives'}; main benefit: "
+                f"{benefit_txt}). Return STRICT JSON only: {{\"reviews\": [\"...\", \"...\", \"...\", \"...\"]}}. "
+                "Sound like real Indian customers, mention visible results, no medical claims."
+            )
+            resp = await chat.send_message(UserMessage(text=prompt))
+            m = re.search(r"\{[\s\S]*\}", resp or "")
+            if m:
+                data = json.loads(m.group(0))
+                bodies = [str(b)[:300] for b in (data.get("reviews") or []) if str(b).strip()][:4]
+                if bodies:
+                    return [_mk(b) for b in bodies]
+        except Exception:
+            pass  # fall through to templates
+
+    # Deterministic fallback (no credits spent)
+    templates = [
+        f"Been using the {name} for 3 weeks and my skin feels so much better. {benefit_txt} is real!",
+        f"Love the texture of this {name}. Absorbs quickly and my skin looks brighter already.",
+        f"Gentle yet effective. The {name} has become a permanent part of my routine.",
+        f"Visible difference in about two weeks. Definitely recommend the {name}.",
+    ]
+    return [_mk(t) for t in templates]

@@ -43,3 +43,8 @@ EMERGENT_LLM_KEY (popped → ai_photo_configured=false, doctor-headshot bg-remov
 
 ## Credentials
 See /app/memory/test_credentials.md (admin password celestaglow2024).
+
+## Constraints to keep (bulk generator durability — do not regress)
+- Never reload the product list or dispatch `admin-data-changed` inside the bulk poll loop; reload ONCE at completion via `fetchAll({silent: true})` (no full-page spinner during a run).
+- Never re-add a fixed time cutoff that abandons long batches.
+- The bulk worker must stay durable: full item queue + `next_index` persisted in Mongo (`ai_jobs`, kind="bulk_gen") with resume on startup (`resume_interrupted_bulk_jobs`). Do not revert to a bare in-memory `asyncio.create_task` without persistence — that is what froze batches on the live site.
