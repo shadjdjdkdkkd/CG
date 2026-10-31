@@ -179,6 +179,10 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   duplicates within the pasted list, so no credits are spent re-generating them. Skipped
   items appear in Bulk History. Verified via curl (existing product skipped, no AI call).
 
+- Bulk History modal: added a **Cancel** button on any running/queued job so you can stop a
+  batch straight from the history panel (not just the live progress bar). Cancels via the
+  same durable endpoint (sets job to terminal `cancelled`). Verified via curl, zero AI calls.
+
 ### Honest constraint (chrome-extension full merge)
 The repo is a STANDALONE full-stack app (its own 1155-line FastAPI /api backend + a separate CRA
 dashboard using @/ path aliases). It cannot be merged in-place into the live Celesta store because

@@ -18,6 +18,7 @@ export const BulkHistoryModal = ({ headers, onClose }) => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -27,6 +28,22 @@ export const BulkHistoryModal = ({ headers, onClose }) => {
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+
+  const cancelJob = async (e, j) => {
+    e.stopPropagation();
+    if (!window.confirm(`Cancel "${j.job_id}"? Products already created are kept.`)) return;
+    setCancelling(j.job_id);
+    try {
+      await axios.post(`${API}/admin/ai/bulk-generate-job/${j.job_id}/cancel`, {}, { headers });
+      // Mark locally right away so it stops showing as running
+      setJobs(prev => prev.map(x => x.job_id === j.job_id ? { ...x, status: 'cancelled' } : x));
+    } catch {
+      alert('Could not cancel this job');
+    } finally {
+      setCancelling(null);
+      load();
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-start justify-center p-4 overflow-y-auto" data-testid="bulk-history-modal">
@@ -61,10 +78,24 @@ export const BulkHistoryModal = ({ headers, onClose }) => {
                         <span className="text-emerald-600">{j.done} done</span> · <span className="text-amber-600">{j.pending} pending</span>{j.failed ? <> · <span className="text-red-600">{j.failed} failed</span></> : null} <span className="text-gray-400">of {j.total}</span>
                       </p>
                     </div>
-                    <div className="w-24 shrink-0">
-                      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                        <div className="h-full bg-emerald-500" style={{ width: `${j.total ? Math.round((j.done / j.total) * 100) : 0}%` }} />
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="w-24">
+                        <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                          <div className="h-full bg-emerald-500" style={{ width: `${j.total ? Math.round((j.done / j.total) * 100) : 0}%` }} />
+                        </div>
                       </div>
+                      {(j.status === 'running' || j.status === 'cancelling' || j.status === 'queued') && (
+                        <button
+                          type="button"
+                          onClick={(e) => cancelJob(e, j)}
+                          disabled={cancelling === j.job_id}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-[11px] font-bold disabled:opacity-50"
+                          data-testid={`bulk-history-cancel-${j.job_id}`}
+                        >
+                          {cancelling === j.job_id ? <Loader2 size={11} className="animate-spin" /> : <X size={11} />}
+                          {cancelling === j.job_id ? 'Cancelling…' : 'Cancel'}
+                        </button>
+                      )}
                     </div>
                   </button>
                   {open === j.job_id && (
