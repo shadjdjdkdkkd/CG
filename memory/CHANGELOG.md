@@ -166,6 +166,11 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   history). Prior production-frozen `1/23` job was caused by in-memory `asyncio` workers
   dying on pod restart — now durable.
 
+- Concern/Category back link now returns to that range's shop home (`/shop?niche=skincare` /
+  `/shop?niche=cosmetics`) — verified in browser (label "Back to Skincare", correct URL).
+- Bulk generator: **Cancel Generation** button confirmed in admin UI; cancel endpoint sets the
+  job to terminal `cancelled` (verified via curl, zero AI calls). Bulk History modal present.
+
 ### Honest constraint (chrome-extension full merge)
 The repo is a STANDALONE full-stack app (its own 1155-line FastAPI /api backend + a separate CRA
 dashboard using @/ path aliases). It cannot be merged in-place into the live Celesta store because

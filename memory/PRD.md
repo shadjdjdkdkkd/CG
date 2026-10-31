@@ -52,6 +52,6 @@ See /app/memory/test_credentials.md (admin password celestaglow2024).
 
 ## Recently delivered (2026-07)
 - Homepage bestsellers label → "Celesta Glow Bestsellers".
-- Concern/Category back link → returns to that page's own shop home (`/skincare` or `/cosmetics`).
+- Concern/Category back link → returns to that range's shop home (`/shop?niche=skincare` or `/shop?niche=cosmetics`).
 - Prepaid-only admin toggle (`site_settings.prepaid_only`): hides COD at checkout and rejects COD orders (400) store-wide when ON.
 - Bulk generator: cancel + history UI, durable resume, no refresh loop. Verified with zero AI calls.
