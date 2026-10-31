@@ -60,4 +60,5 @@ See /app/memory/test_credentials.md (admin password celestaglow2024).
 - Bulk duplicate-guard: skips already-existing products before any AI prompt (fixed the
   restart loop that re-ran the same products and burned credits).
 - Order emails: fixed a crash on dict items; order creation returns 200.
+- Admin dashboard: new "Add to Bag Clicks" stat card (counts every add-to-bag / combo add).
 - Shop page: products grouped under concern titles; only concerns with tagged products show.

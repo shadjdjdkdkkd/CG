@@ -211,6 +211,17 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
 - Verified with free checks only (no AI calls, no paid testing run): order 200 OK, bulk
   duplicate-guard skips existing products with 0 AI spend.
 
+## 2026-07 — Add-to-Bag metric on admin dashboard (free checks only)
+
+- New **Add to Bag Clicks** stat card on the admin dashboard homepage (next to Orders /
+  Revenue / Purchased / Leads). Counts every Add to Bag + combo-add click store-wide.
+- Frontend: `addToCart` / `addComboToCart` now record an `add_to_cart` action to the
+  existing tracking system (no extra third-party calls).
+- Backend: `/admin/analytics/overview` returns `add_to_cart_clicks` (product adds + combo
+  adds + legacy DOM add-to-cart clicks).
+- Verified with free checks: 2 simulated add events counted by the endpoint, card renders
+  on the dashboard. No AI calls, no paid testing run.
+
 ### Honest constraint (chrome-extension full merge)
 The repo is a STANDALONE full-stack app (its own 1155-line FastAPI /api backend + a separate CRA
 dashboard using @/ path aliases). It cannot be merged in-place into the live Celesta store because

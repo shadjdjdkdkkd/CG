@@ -630,7 +630,7 @@ function AdminDashboard() {
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+              <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
                 <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 overflow-hidden" data-testid="stat-orders">
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -664,6 +664,16 @@ function AdminDashboard() {
                   <p className="text-xl sm:text-2xl font-bold text-green-600 truncate">{analytics?.conversions || liveAnalytics?.conversions || 0}</p>
                   <p className="text-xs sm:text-sm text-green-700 font-medium">Purchased</p>
                 </Link>
+
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 overflow-hidden" data-testid="stat-add-to-cart">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                      <ShoppingCart className="w-5 h-5 text-amber-600" />
+                    </div>
+                  </div>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{(analytics?.add_to_cart_clicks ?? 0).toLocaleString()}</p>
+                  <p className="text-xs sm:text-sm text-gray-500">Add to Bag Clicks</p>
+                </div>
 
                 <div className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 overflow-hidden" data-testid="stat-leads">
                   <div className="flex items-center justify-between mb-3">

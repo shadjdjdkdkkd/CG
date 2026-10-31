@@ -418,6 +418,16 @@ async def get_analytics_overview(admin: bool = Depends(verify_admin)):
     total_blogs = await db.blogs.count_documents({})
     published_blogs = await db.blogs.count_documents({"status": "published"})
     total_locations = await db.locations.count_documents({})
+
+    # Add-to-cart clicks (product + combo adds, and legacy DOM-level "Add to Cart"
+    # clicks) — feeds the dashboard "Add to Bag Clicks" card.
+    add_to_cart_clicks = await db.tracking_events.count_documents({
+        "$or": [
+            {"action": "add_to_cart"},
+            {"action": "add_combo"},
+            {"action": "button_click", "data.button_type": "claim_offer"},
+        ]
+    })
     
     # Calculate revenue
     orders = await db.orders.find({}, {"amount": 1}).to_list(10000)
@@ -436,6 +446,7 @@ async def get_analytics_overview(admin: bool = Depends(verify_admin)):
         "published_blogs": published_blogs,
         "draft_blogs": total_blogs - published_blogs,
         "total_locations": total_locations,
+        "add_to_cart_clicks": add_to_cart_clicks,
         "recent_orders": recent_orders,
         "top_blogs": top_blogs
     }

@@ -22,6 +22,7 @@ import ReviewsCarousel from '../components/ReviewsCarousel';
 import { cachedGet, peek } from '../utils/apiCache';
 import SEOHead, { faqJsonLd, breadcrumbJsonLd } from '../components/SEOHead';
 import { trackAddToCart as metaTrackAddToCart } from '../utils/metaPixel';
+import { trackAction as trackUserAction } from '../utils/userTracking';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 const ACCENT = '#0f766e';
@@ -153,6 +154,8 @@ const addToCart = (slug, quantity = 1, shadeId = null, meta = {}) => {
   // Meta Pixel — AddToCart. Callers with product context pass real price/name
   // via `meta` for accurate value reporting; other entry points use defaults.
   try { metaTrackAddToCart(meta.price, quantity, meta.name, [slug]); } catch {}
+  // Dashboard "Add to Bag Clicks" metric
+  try { trackUserAction('add_to_cart', { slug, quantity, page: window.location.pathname }); } catch {}
   return true;
 };
 const addComboToCart = (comboId, quantity = 1) => {
@@ -170,6 +173,7 @@ const addComboToCart = (comboId, quantity = 1) => {
   try { window.dispatchEvent(new Event('cart-bounce')); } catch {}
   // Meta Pixel — AddToCart for combos
   try { metaTrackAddToCart(undefined, quantity, 'Celesta Glow Combo', [comboId]); } catch {}
+  try { trackUserAction('add_to_cart', { combo_id: comboId, quantity, page: window.location.pathname }); } catch {}
   return true;
 };
 const setProductQty = (slug, quantity, shadeId = null) => {
