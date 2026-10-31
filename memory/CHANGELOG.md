@@ -150,6 +150,22 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
     github.com/dragon16t/chrome-extension (/app/backend/af_extension) with the backend URL
     injected into config.js. Verified 10-file zip downloads.
 
+## 2026-07 — Storefront + admin + bulk generator batch (self-verified, no AI credits spent)
+
+- Homepage: bestsellers section label changed to **"Celesta Glow Bestsellers"**.
+- Concern/Category back link: now returns to that page's own shop home (`/skincare` or
+  `/cosmetics`) instead of the generic home.
+- **Prepaid-only mode**: new admin-dashboard toggle (PrepaidOnlyToggle). When ON, COD is
+  hidden at checkout (incl. instant-delivery) and the backend order API rejects COD with
+  400. Persists in `site_settings.prepaid_only`. Verified ON/OFF round-trip + COD rejection
+  via curl.
+- **Bulk AI generator**: durable Mongo-backed queue + `next_index` resume on restart;
+  per-item timeout; cancel endpoint (terminal `cancelled`, never auto-resumed); job history
+  endpoint; Bulk History modal + Cancel button in admin; polling resumes after page reload
+  without a refresh loop. Verified via curl with zero AI calls (seeded dummy jobs, cancel,
+  history). Prior production-frozen `1/23` job was caused by in-memory `asyncio` workers
+  dying on pod restart — now durable.
+
 ### Honest constraint (chrome-extension full merge)
 The repo is a STANDALONE full-stack app (its own 1155-line FastAPI /api backend + a separate CRA
 dashboard using @/ path aliases). It cannot be merged in-place into the live Celesta store because

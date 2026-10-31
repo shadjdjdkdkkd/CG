@@ -48,3 +48,10 @@ See /app/memory/test_credentials.md (admin password celestaglow2024).
 - Never reload the product list or dispatch `admin-data-changed` inside the bulk poll loop; reload ONCE at completion via `fetchAll({silent: true})` (no full-page spinner during a run).
 - Never re-add a fixed time cutoff that abandons long batches.
 - The bulk worker must stay durable: full item queue + `next_index` persisted in Mongo (`ai_jobs`, kind="bulk_gen") with resume on startup (`resume_interrupted_bulk_jobs`). Do not revert to a bare in-memory `asyncio.create_task` without persistence — that is what froze batches on the live site.
+- Cancellation must be terminal: a `cancel_requested` job stops between items, is marked `cancelled`, and `resume_interrupted_bulk_jobs` only resumes `status=="running"` (never `cancelled`).
+
+## Recently delivered (2026-07)
+- Homepage bestsellers label → "Celesta Glow Bestsellers".
+- Concern/Category back link → returns to that page's own shop home (`/skincare` or `/cosmetics`).
+- Prepaid-only admin toggle (`site_settings.prepaid_only`): hides COD at checkout and rejects COD orders (400) store-wide when ON.
+- Bulk generator: cancel + history UI, durable resume, no refresh loop. Verified with zero AI calls.

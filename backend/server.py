@@ -391,6 +391,13 @@ async def verify_payment(payment_data: RazorpayPaymentVerify):
 
 @api_router.post("/orders", response_model=Order)
 async def create_order(order_input: OrderCreate, request: Request):
+    # ===== PREPAID-ONLY MODE =====
+    # When the admin enables "prepaid only" on the dashboard, Cash-on-Delivery
+    # is disabled store-wide and only prepaid orders are accepted.
+    if (order_input.payment_method or "").upper() == "COD":
+        _s = await db.site_settings.find_one({"_id": "main"}, {"_id": 0, "prepaid_only": 1})
+        if _s and _s.get("prepaid_only"):
+            raise HTTPException(status_code=400, detail="Cash on Delivery is currently unavailable. Please pay online to place your order.")
     # ===== STOCK VALIDATION + DECREMENT =====
     # Build a list of (slug, qty, shade_id) tuples from incoming items + combo (combos decrement underlying products too)
     stock_changes = []  # list of (slug, qty, shade_id_or_None)

@@ -9,6 +9,7 @@ import { resolveImageUrl } from '../../utils/productImage';
 import { GenerationProgress } from '../../components/admin/GenerationProgress';
 import { RegenerateImageModal } from '../../components/admin/RegenerateImageModal';
 import { AiVariationsModal } from '../../components/admin/AiVariationsModal';
+import { BulkHistoryModal } from '../../components/admin/BulkHistoryModal';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -715,6 +716,7 @@ function AdminProducts() {
   const [regenProduct, setRegenProduct] = useState(null);
   const [aiVarProduct, setAiVarProduct] = useState(null);
   const [bulkGen, setBulkGen] = useState({ running: false });
+  const [showBulkHistory, setShowBulkHistory] = useState(false);
   // Bulk-selection state — used by the "select multiple to delete" checkbox UX.
   const [selectedSlugs, setSelectedSlugs] = useState(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -791,7 +793,7 @@ function AdminProducts() {
   const pollBulkJob = async (jobId, total, startedAt) => {
     if (bulkPollingRef.current) return;
     bulkPollingRef.current = true;
-    setBulkGen({ running: true, done: 0, failed: 0, total, current: null, step: 'queued', startedAt: startedAt || Date.now() });
+    setBulkGen({ running: true, done: 0, failed: 0, total, current: null, step: 'queued', startedAt: startedAt || Date.now(), jobId });
     let job = null;
     let errStreak = 0;
     let lastDone = -1;
@@ -817,11 +819,11 @@ function AdminProducts() {
         const processed = (j.done ?? 0) + (j.failed ?? 0);
         // Only push state when something visible actually changed.
         setBulkGen(prev => {
-          const next = { ...prev, running: j.status === 'running', done: j.done ?? 0, failed: j.failed ?? 0, total: j.total ?? prev.total, current: j.current, step: j.item?.step || 'queued' };
+          const next = { ...prev, running: j.status === 'running' || j.status === 'cancelling', done: j.done ?? 0, failed: j.failed ?? 0, total: j.total ?? prev.total, current: j.current, step: j.status === 'cancelling' ? 'cancelling…' : (j.item?.step || 'queued'), jobId };
           return (prev.done === next.done && prev.failed === next.failed && prev.current === next.current && prev.step === next.step && prev.total === next.total && prev.running === next.running) ? prev : next;
         });
         lastDone = processed;
-        if (j.status !== 'running' && j.status !== 'queued') break;
+        if (j.status !== 'running' && j.status !== 'queued' && j.status !== 'cancelling') break;
       }
       try { localStorage.removeItem(BULK_JOB_KEY); } catch {}
       const created = (job?.created || []).length;
@@ -1181,6 +1183,9 @@ function AdminProducts() {
       {aiVarProduct && (
         <AiVariationsModal product={aiVarProduct} headers={headers} onClose={() => setAiVarProduct(null)} onCreated={() => { try { window.dispatchEvent(new Event('admin-data-changed')); } catch {} fetchAll(); }} />
       )}
+      {showBulkHistory && (
+        <BulkHistoryModal headers={headers} onClose={() => setShowBulkHistory(false)} />
+      )}
       {varOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" data-testid="variation-modal">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -1454,8 +1459,34 @@ function AdminProducts() {
           </button>
           {ocInfo && <GenerationProgress mode="single" name={ocInfo.name} step={aiStep} startedAt={ocInfo.startedAt} />}
           {bulkGen.running && (
-            <GenerationProgress mode="bulk" name={bulkGen.current} step={bulkGen.step} done={bulkGen.done} failed={bulkGen.failed} total={bulkGen.total} startedAt={bulkGen.startedAt} />
+            <div className="w-full">
+              <GenerationProgress mode="bulk" name={bulkGen.current} step={bulkGen.step} done={bulkGen.done} failed={bulkGen.failed} total={bulkGen.total} startedAt={bulkGen.startedAt} />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!bulkGen.jobId) return;
+                  if (!window.confirm('Cancel this bulk generation? Products already created will be kept.')) return;
+                  try {
+                    await axios.post(`${API}/admin/ai/bulk-generate-job/${bulkGen.jobId}/cancel`, {}, { headers });
+                    setBulkGen(prev => ({ ...prev, step: 'cancelling…' }));
+                  } catch { alert('Could not cancel the job'); }
+                }}
+                className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold"
+                data-testid="bulk-cancel-btn"
+              >
+                <X size={13} /> Cancel generation
+              </button>
+            </div>
           )}
+          <button
+            type="button"
+            onClick={() => setShowBulkHistory(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-bold"
+            data-testid="bulk-history-btn"
+            title="See previously generated bulk batches, what completed and what's pending."
+          >
+            <Clock size={15} /> Bulk History
+          </button>
 
           <button
             type="button"

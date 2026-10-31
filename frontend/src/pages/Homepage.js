@@ -450,7 +450,7 @@ function Homepage() {
               <Flame size={11} style={{ fill: accent, color: accent }} /> {bs.eyebrow || 'Trending now'}
             </p>
             <h2 className="font-heading text-lg sm:text-2xl lg:text-3xl font-black text-gray-900 leading-tight">
-              {bs.title_prefix || 'Skin Care'} <span className="italic" style={{ color: accent }}>{bs.title_highlight || 'Bestsellers'}</span>
+              {(bs.title_prefix && !['Anti-Aging', 'Anti Aging', 'Skin Care', 'Skincare'].includes(bs.title_prefix)) ? bs.title_prefix : 'Celesta Glow'} <span className="italic" style={{ color: accent }}>{bs.title_highlight || 'Bestsellers'}</span>
             </h2>
           </div>
           <Link to="/shop?niche=skin-care" className="text-[11px] sm:text-xs font-bold flex items-center gap-1 hover:underline" style={{ color: accent }}>

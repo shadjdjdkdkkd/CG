@@ -2257,6 +2257,9 @@ class SiteSettingsUpdate(BaseModel):
     homepage_feature_title: Optional[str] = None
     homepage_feature_subtitle: Optional[str] = None
     volume_discounts: Optional[List[Dict]] = None  # [{min_items: 2, discount_percent: 5}, ...]
+    # Store-wide master switch: when True, Cash on Delivery is disabled at
+    # checkout AND rejected by the order API (admin Prepaid-only toggle).
+    prepaid_only: Optional[bool] = None
     # Multi-banner hero carousel
     banner_carousel: Optional[List[Dict]] = None  # [{id, image, title, subtitle, cta_text, cta_link, sort_order}, ...]
     carousel_autoplay_ms: Optional[int] = None  # default 2000

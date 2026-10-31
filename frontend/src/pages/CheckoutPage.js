@@ -108,10 +108,16 @@ function CheckoutPage() {
   // the flag is off (default), COD works exactly like before. When on, COD is
   // gated to Celesta Glow's own anti-aging products OR instant-delivery zones.
   const [codRestrictionEnabled, setCodRestrictionEnabled] = useState(false);
+  // Store-wide "prepaid only" master switch (admin dashboard). When ON, COD is
+  // fully disabled regardless of niche / pincode.
+  const [prepaidOnly, setPrepaidOnly] = useState(false);
   useEffect(() => {
     axios.get(`${API}/api/payment-policy`)
       .then((r) => setCodRestrictionEnabled(!!r.data?.cod_restriction_enabled))
       .catch(() => setCodRestrictionEnabled(false));
+    axios.get(`${API}/api/site-settings`)
+      .then((r) => setPrepaidOnly(!!r.data?.prepaid_only))
+      .catch(() => setPrepaidOnly(false));
   }, []);
 
   // COD availability gate (Feb 2026 policy):
@@ -128,6 +134,7 @@ function CheckoutPage() {
   // don't hit a temporal-dead-zone crash when React evaluates the memo.
   const [pincodeInZone, setPincodeInZone] = useState(null); // null=unknown, true=in-zone, false=out-of-zone
   const codAvailable = React.useMemo(() => {
+    if (prepaidOnly) return false; // store-wide prepaid-only master switch
     if (!codRestrictionEnabled) return true; // policy off → legacy behaviour
     const items = cartData?.items || [];
     if (items.length === 0) return true;
@@ -136,7 +143,7 @@ function CheckoutPage() {
     if (allAntiAging) return true;
     // Not all house-brand → allow COD only if we know the delivery pincode is in-zone
     return pincodeInZone === true;
-  }, [cartData, codRestrictionEnabled, pincodeInZone]);
+  }, [cartData, codRestrictionEnabled, pincodeInZone, prepaidOnly]);
 
   const [formData, setFormData] = useState({ name: '', phone: '', email: '', house_number: '', area: '', city: '', pincode: '', state: '' });
   const [submitting, setSubmitting] = useState(false);
@@ -157,11 +164,11 @@ function CheckoutPage() {
   // Uses a proper useEffect (never setState during render) so React can't blow up
   // the cart/checkout tree. Declared AFTER pinInfo state to avoid TDZ.
   useEffect(() => {
-    if (paymentMethod === 'COD' && !codAvailable && !(pinInfo?.coverage?.instant_available)) {
+    if (paymentMethod === 'COD' && (prepaidOnly || (!codAvailable && !(pinInfo?.coverage?.instant_available)))) {
       setPaymentMethod('prepaid');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [codAvailable, paymentMethod, pinInfo]);
+  }, [codAvailable, paymentMethod, pinInfo, prepaidOnly]);
 
   // Auto-disable prepaid bonus when user selects COD — server would strip it
   // anyway, but keeping the UI in sync avoids a confusing "₹100 saved" chip
@@ -767,7 +774,7 @@ function CheckoutPage() {
 
                 {(() => {
                   const instantOk = !!pinInfo?.coverage?.instant_available;
-                  const canCOD = codAvailable || instantOk;
+                  const canCOD = (codAvailable || instantOk) && !prepaidOnly;
                   return (
                     <div className="space-y-2.5">
                       <label className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${paymentMethod === 'prepaid' ? 'border-green-500 bg-green-50/50 shadow-sm' : 'border-gray-100 hover:border-gray-200'}`}>

@@ -296,32 +296,8 @@ async def generate_product_reviews(name: str, niche: str = "skincare",
         }
 
     benefit_txt = (benefits[0] if benefits else "healthier skin")
-    # AI attempt (best-effort; cheap single text call)
-    api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('EMERGENT_LLM_KEY')
-    if api_key:
-        try:
-            chat = GeminiChat(
-                api_key=api_key,
-                session_id=f"rev-{uuid.uuid4().hex[:8]}",
-                system_message="You write short, genuine-sounding product reviews.",
-            ).with_model("gemini", "gemini-2.5-flash")
-            prompt = (
-                f"Write 4 short, realistic, positive customer reviews (1-2 sentences each) for the Indian "
-                f"skincare product '{name}' (key ingredients: {key_ingredients or 'gentle actives'}; main benefit: "
-                f"{benefit_txt}). Return STRICT JSON only: {{\"reviews\": [\"...\", \"...\", \"...\", \"...\"]}}. "
-                "Sound like real Indian customers, mention visible results, no medical claims."
-            )
-            resp = await chat.send_message(UserMessage(text=prompt))
-            m = re.search(r"\{[\s\S]*\}", resp or "")
-            if m:
-                data = json.loads(m.group(0))
-                bodies = [str(b)[:300] for b in (data.get("reviews") or []) if str(b).strip()][:4]
-                if bodies:
-                    return [_mk(b) for b in bodies]
-        except Exception:
-            pass  # fall through to templates
-
-    # Deterministic fallback (no credits spent)
+    # Reviews do NOT need AI — use deterministic, product-tailored templates to
+    # conserve Gemini credits (no API call here by design).
     templates = [
         f"Been using the {name} for 3 weeks and my skin feels so much better. {benefit_txt} is real!",
         f"Love the texture of this {name}. Absorbs quickly and my skin looks brighter already.",

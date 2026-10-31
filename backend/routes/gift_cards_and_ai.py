@@ -2110,6 +2110,70 @@ async def bulk_generate_job(
     return job
 
 
+@router.post("/admin/ai/bulk-generate-job/{job_id}/cancel")
+async def cancel_bulk_generate_job(
+    job_id: str,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """Request cancellation of a running bulk job. The worker checks this flag
+    between items and stops gracefully — products already created are kept."""
+    _auth(x_admin_token, admin_session)
+    from services.job_store import save_job
+    mem = _bulk_gen_jobs.get(job_id)
+    if mem:
+        mem["cancel_requested"] = True
+        if mem.get("status") == "running":
+            mem["status"] = "cancelling"
+        try:
+            await save_job(_db, mem)
+        except Exception:
+            pass
+        return {"success": True, "status": mem.get("status")}
+    # Not in memory (e.g. orphaned on this pod) — flag it in Mongo so a resuming
+    # worker stops, and mark it cancelled if nothing is actively running.
+    doc = await _db.ai_jobs.find_one({"job_id": job_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Job not found")
+    await _db.ai_jobs.update_one(
+        {"job_id": job_id},
+        {"$set": {"cancel_requested": True,
+                  "status": "cancelled" if doc.get("status") in ("running", "cancelling") else doc.get("status")}},
+    )
+    return {"success": True, "status": "cancelled"}
+
+
+@router.get("/admin/ai/bulk-generate-history")
+async def bulk_generate_history(
+    limit: int = 30,
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+    admin_session: Optional[str] = Cookie(None),
+):
+    """List recent bulk-generation jobs with their done/pending/created summary."""
+    _auth(x_admin_token, admin_session)
+    cursor = _db.ai_jobs.find({"kind": "bulk_gen"}, {"_id": 0}).sort("created_at", -1).limit(min(limit, 100))
+    docs = await cursor.to_list(length=min(limit, 100))
+    out = []
+    for d in docs:
+        total = int(d.get("total") or 0)
+        done = int(d.get("done") or 0)
+        failed = int(d.get("failed") or 0)
+        out.append({
+            "job_id": d.get("job_id"),
+            "status": d.get("status"),
+            "total": total,
+            "done": done,
+            "failed": failed,
+            "pending": max(0, total - done - failed),
+            "current": d.get("current"),
+            "created": d.get("created") or [],
+            "errors": d.get("errors") or [],
+            "created_at": d.get("created_at"),
+            "finished_at": d.get("finished_at"),
+        })
+    return {"success": True, "jobs": out}
+
+
 # Strong references to running bulk tasks — asyncio only keeps WEAK refs to
 # tasks, so an un-referenced long-running worker can be garbage-collected
 # mid-batch (silently stopping after an item).
@@ -2135,6 +2199,10 @@ async def _bulk_generate_worker(job_id: str, body: "BulkGenerateRequest", items:
     job = _bulk_gen_jobs[job_id]
     try:
         for idx in range(start_index, len(items)):
+            if job.get("cancel_requested"):
+                job["status"] = "cancelled"
+                logger.info(f"[bulk-gen] {job_id} cancelled by admin at item {idx + 1}/{len(items)}")
+                break
             it = items[idx]
             job["current"] = it.name
             job["index"] = idx + 1
@@ -2186,7 +2254,8 @@ async def _bulk_generate_worker(job_id: str, body: "BulkGenerateRequest", items:
                 pass
             # Gentle pacing so we never hammer the image/LLM provider.
             await _aio.sleep(1.0)
-        job["status"] = "done"
+        if job.get("status") != "cancelled":
+            job["status"] = "done"
     except BaseException as e:  # noqa: BLE001 — always finalise the job record
         logger.exception(f"[bulk-gen] job {job_id} aborted: {e!r}")
         job["status"] = "failed"

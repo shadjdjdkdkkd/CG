@@ -280,6 +280,7 @@ export default function ConcernCategoryPage({ mode = 'concern' }) {
             // landed on a skincare subcategory like "Chemical Exfoliants".
             const niche = head?.niche || (mode === 'category-cosmetics' ? 'cosmetics' : 'skincare');
             const isCosmetic = niche === 'cosmetics';
+            // "Back" returns to that category's own shop home page.
             const backTo = isCosmetic
               ? { path: '/cosmetics', label: 'Cosmetics' }
               : { path: '/skincare', label: 'Skincare' };
