@@ -11,6 +11,7 @@ import {
 import { useOrderNotifications } from '../../utils/orderNotifications';
 import { getAdminToken, clearAdminToken } from '../../utils/adminAuth';
 import { PrepaidOnlyToggle } from '../../components/admin/PrepaidOnlyToggle';
+import { PartialCodToggle } from '../../components/admin/PartialCodToggle';
 import DailyOrdersPanel from '../../components/admin/DailyOrdersPanel';
 import DashboardSummaryPanel from '../../components/admin/DashboardSummaryPanel';
 import SnapshotBackupWidget from '../../components/admin/SnapshotBackupWidget';
@@ -493,6 +494,7 @@ function AdminDashboard() {
           {activeTab === 'overview' && (
             <>
               <PrepaidOnlyToggle />
+              <PartialCodToggle />
               {/* Date Filter with Calendar */}
               <div className="bg-white rounded-2xl p-4 mb-6 border border-gray-100">
                 <div className="flex items-center justify-between flex-wrap gap-3">

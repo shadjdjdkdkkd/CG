@@ -2260,6 +2260,14 @@ class SiteSettingsUpdate(BaseModel):
     # Store-wide master switch: when True, Cash on Delivery is disabled at
     # checkout AND rejected by the order API (admin Prepaid-only toggle).
     prepaid_only: Optional[bool] = None
+    # Partial COD: when True, COD orders collect `cod_advance_amount` online now,
+    # balance on delivery (admin Partial-COD toggle).
+    partial_cod_enabled: Optional[bool] = None
+    partial_cod_enabled: Optional[bool] = None
+    # Partial COD: when True, COD orders collect a small advance online and the
+    # rest on delivery. `cod_advance_amount` (₹) is what the customer pays now.
+    partial_cod_enabled: Optional[bool] = None
+    cod_advance_amount: Optional[float] = None
     # Multi-banner hero carousel
     banner_carousel: Optional[List[Dict]] = None  # [{id, image, title, subtitle, cta_text, cta_link, sort_order}, ...]
     carousel_autoplay_ms: Optional[int] = None  # default 2000

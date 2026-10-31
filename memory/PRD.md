@@ -54,6 +54,8 @@ See /app/memory/test_credentials.md (admin password celestaglow2024).
 - Homepage bestsellers label → "Celesta Glow Bestsellers".
 - Concern/Category back link → returns to that range's shop home (`/shop?niche=skincare` or `/shop?niche=cosmetics`).
 - Prepaid-only admin toggle (`site_settings.prepaid_only`): hides COD at checkout and rejects COD orders (400) store-wide when ON.
+- Partial COD admin toggle (`site_settings.partial_cod_enabled`): COD collects ₹100 online, balance on delivery; order shows "Partial COD (₹100 paid online)" and label balance reflects the advance.
 - Bulk generator: cancel + history UI, durable resume, no refresh loop. Verified with zero AI calls.
+- Bulk cancel now hard-stops the running task; restart skips cancelled jobs (no credit burn).
+- Bulk duplicate-guard: skips already-existing products before any AI prompt.
 - Shop page: products grouped under concern titles; only concerns with tagged products show.
-- Bulk generator: skips already-existing / duplicate products before generation (no wasted credits).

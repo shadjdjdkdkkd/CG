@@ -2165,6 +2165,10 @@ async def cancel_bulk_generate_job(
             await save_job(_db, mem)
         except Exception:
             pass
+        # Hard-stop the in-memory worker so it truly stops now (not just between items).
+        task = _bulk_gen_running.get(job_id)
+        if task and not task.done():
+            task.cancel()
         return {"success": True, "status": mem.get("status")}
     # Not in memory (e.g. orphaned on this pod) — flag it in Mongo so a resuming
     # worker stops, and mark it cancelled if nothing is actively running.
@@ -2215,17 +2219,35 @@ async def bulk_generate_history(
 # mid-batch (silently stopping after an item).
 _bulk_gen_tasks: set = set()
 
+# job_id -> asyncio.Task for any in-flight bulk worker on THIS process.
+# Used to (a) prevent duplicate workers after a deploy/restart and (b) actually
+# cancel a running task when the admin hits Cancel.
+_bulk_gen_running: dict = {}
+
 # Hard cap per product so ONE hung AI/image call can never freeze the batch.
 _BULK_ITEM_TIMEOUT_S = int(os.environ.get("BULK_GEN_ITEM_TIMEOUT_S", "480"))
 
 
 def _launch_bulk_worker(job_id: str, body: "BulkGenerateRequest", items: list, start_index: int = 0):
-    """Create + track the background worker task and its Mongo mirror."""
+    """Create + track the background worker task and its Mongo mirror.
+
+    Guards against double-launching a job that's already running on this
+    process (e.g. a restart triggered a resume while the old task still lives),
+    which would otherwise burn duplicate AI credits on the same items."""
     import asyncio as _aio
     from services.job_store import start_mirror
+    if job_id in _bulk_gen_running and not _bulk_gen_running[job_id].done():
+        logger.info(f"[bulk-gen] {job_id} already running on this process — not starting a duplicate")
+        return
     _t = _aio.create_task(_bulk_generate_worker(job_id, body, items, start_index))
+    _bulk_gen_running[job_id] = _t
     _bulk_gen_tasks.add(_t)
-    _t.add_done_callback(_bulk_gen_tasks.discard)
+
+    def _on_done(task):
+        _bulk_gen_tasks.discard(task)
+        if _bulk_gen_running.get(job_id) is task:
+            _bulk_gen_running.pop(job_id, None)
+    _t.add_done_callback(_on_done)
     start_mirror(_db, _bulk_gen_jobs[job_id])
 
 
@@ -2249,6 +2271,22 @@ async def _bulk_generate_worker(job_id: str, body: "BulkGenerateRequest", items:
             # resumes AT this item (never skips it).
             try:
                 await save_job(_db, job)
+            except Exception:
+                pass
+            # Recheck for duplicates RIGHT BEFORE the AI prompt so a resumed /
+            # re-run batch never spends credits on a product that already exists.
+            try:
+                _s = _slugify(it.name)
+                _dup = await _db.products.find_one({"$or": [{"slug": _s}, {"name": (it.name or "").strip()}]}, {"_id": 1, "slug": 1})
+                if _dup:
+                    job["errors"].append({"name": it.name, "error": "already exists — skipped"})
+                    job["failed"] += 1
+                    job["next_index"] = idx + 1
+                    try:
+                        await save_job(_db, job)
+                    except Exception:
+                        pass
+                    continue
             except Exception:
                 pass
             try:
@@ -2292,6 +2330,11 @@ async def _bulk_generate_worker(job_id: str, body: "BulkGenerateRequest", items:
             await _aio.sleep(1.0)
         if job.get("status") != "cancelled":
             job["status"] = "done"
+    except _aio.CancelledError:
+        # Hard-cancelled via the Cancel button. Keep it cancelled; don't turn it
+        # into a generic failure.
+        job["status"] = "cancelled"
+        raise
     except BaseException as e:  # noqa: BLE001 — always finalise the job record
         logger.exception(f"[bulk-gen] job {job_id} aborted: {e!r}")
         job["status"] = "failed"
@@ -2299,6 +2342,8 @@ async def _bulk_generate_worker(job_id: str, body: "BulkGenerateRequest", items:
         if isinstance(e, (KeyboardInterrupt, SystemExit)):
             raise
     finally:
+        if job.get("status") == "cancelling":
+            job["status"] = "cancelled"
         job["current"] = None
         job["step"] = "done"
         job["finished_at"] = datetime.now(timezone.utc).isoformat()
@@ -2320,7 +2365,7 @@ async def resume_interrupted_bulk_jobs():
     if _db is None:
         return
     try:
-        cursor = _db.ai_jobs.find({"kind": "bulk_gen", "status": "running"}, {"_id": 0})
+        cursor = _db.ai_jobs.find({"kind": "bulk_gen", "status": {"$in": ["running", "cancelling"]}}, {"_id": 0})
         docs = await cursor.to_list(length=50)
     except Exception as e:
         logger.warning(f"[bulk-gen] resume scan failed: {e}")
@@ -2330,6 +2375,13 @@ async def resume_interrupted_bulk_jobs():
         if not job_id:
             continue
         try:
+            # Never resume a job the admin cancelled or flagged for cancel — that
+            # is what kept burning AI credits after a deploy/restart.
+            if doc.get("cancel_requested"):
+                await _db.ai_jobs.update_one({"job_id": job_id}, {"$set": {"status": "cancelled", "step": "done"}})
+                continue
+            if job_id in _bulk_gen_running and not _bulk_gen_running[job_id].done():
+                continue  # already running on this process
             items = [BulkGenItem(**it) for it in (doc.get("items") or [])]
             if not items:
                 continue

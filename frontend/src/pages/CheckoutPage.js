@@ -111,12 +111,19 @@ function CheckoutPage() {
   // Store-wide "prepaid only" master switch (admin dashboard). When ON, COD is
   // fully disabled regardless of niche / pincode.
   const [prepaidOnly, setPrepaidOnly] = useState(false);
+  // Partial COD: COD orders collect `partialAdvance` online now, rest on delivery.
+  const [partialCodEnabled, setPartialCodEnabled] = useState(false);
+  const [partialAdvance, setPartialAdvance] = useState(0);
   useEffect(() => {
     axios.get(`${API}/api/payment-policy`)
       .then((r) => setCodRestrictionEnabled(!!r.data?.cod_restriction_enabled))
       .catch(() => setCodRestrictionEnabled(false));
     axios.get(`${API}/api/site-settings`)
-      .then((r) => setPrepaidOnly(!!r.data?.prepaid_only))
+      .then((r) => {
+        setPrepaidOnly(!!r.data?.prepaid_only);
+        setPartialCodEnabled(!!r.data?.partial_cod_enabled);
+        setPartialAdvance(Number(r.data?.cod_advance_amount || 0));
+      })
       .catch(() => setPrepaidOnly(false));
   }, []);
 
@@ -469,9 +476,57 @@ function CheckoutPage() {
         });
         rzp.open();
       } else {
-        const order = await axios.post(`${API}/api/orders`, payload);
-        fireConversion(order.data.order_id);
-        goToSuccess(order.data);
+        // Partial COD: collect the advance online (Razorpay) before placing the order.
+        const advance = partialCodEnabled && partialAdvance > 0
+          ? Math.min(partialAdvance, cartData.total || partialAdvance)
+          : 0;
+        if (advance > 0) {
+          if (!window.Razorpay) {
+            await new Promise((resolve, reject) => {
+              const existing = document.getElementById('rzp-sdk');
+              if (existing) { existing.addEventListener('load', resolve); existing.addEventListener('error', reject); return; }
+              const s = document.createElement('script');
+              s.id = 'rzp-sdk';
+              s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+              s.async = true;
+              s.onload = resolve;
+              s.onerror = () => reject(new Error('Failed to load Razorpay'));
+              document.head.appendChild(s);
+            });
+          }
+          const rzpOrder = await axios.post(`${API}/api/create-razorpay-order`, { amount: advance });
+          const options = {
+            key: process.env.REACT_APP_RAZORPAY_KEY_ID || 'rzp_test_key', amount: rzpOrder.data.amount, currency: 'INR',
+            name: 'Celesta Glow', description: `COD Advance (₹${advance})`, order_id: rzpOrder.data.id,
+            handler: async (response) => {
+              try {
+                const partialPayload = { ...payload, advance_paid: advance, razorpay_payment_id: response.razorpay_payment_id };
+                const [, orderResp] = await Promise.all([
+                  axios.post(`${API}/api/verify-payment`, response),
+                  axios.post(`${API}/api/orders`, partialPayload),
+                ]);
+                fireConversion(orderResp.data.order_id);
+                goToSuccess(orderResp.data);
+              } catch (e) {
+                alert(e?.response?.data?.detail || 'Advance payment verification failed');
+                setSubmitting(false);
+              }
+            },
+            prefill: { name: formData.name, contact: formData.phone, email: formData.email },
+            theme: { color: '#16a34a' },
+            modal: { ondismiss: () => setSubmitting(false), escape: true, backdropclose: false },
+          };
+          const rzp = new window.Razorpay(options);
+          rzp.on('payment.failed', (resp) => {
+            alert(resp?.error?.description || 'Advance payment failed. Please try again.');
+            setSubmitting(false);
+          });
+          rzp.open();
+        } else {
+          const order = await axios.post(`${API}/api/orders`, payload);
+          fireConversion(order.data.order_id);
+          goToSuccess(order.data);
+        }
       }
     } catch (err) {
       const detail = err?.response?.data?.detail || err?.message || 'Order failed. Please try again.';
@@ -797,7 +852,11 @@ function CheckoutPage() {
                                 <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">Instant Zone</span>
                               )}
                             </div>
-                            <p className="text-xs text-gray-500 mt-0.5">₹0 advance · Pay full on delivery</p>
+                            {partialCodEnabled && partialAdvance > 0 ? (
+                              <p className="text-xs text-amber-700 font-medium mt-0.5">Partial COD — pay ₹{Math.min(partialAdvance, cartData?.total || partialAdvance)} now, rest on delivery</p>
+                            ) : (
+                              <p className="text-xs text-gray-500 mt-0.5">₹0 advance · Pay full on delivery</p>
+                            )}
                           </div>
                         </label>
                       ) : (
@@ -985,7 +1044,7 @@ function CheckoutPage() {
               )}
 
               <button onClick={placeOrder} disabled={submitting} className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-3.5 rounded-2xl mt-4 text-sm shadow-xl shadow-green-200/40 transition-all" data-testid="place-order-btn">
-                {submitting ? 'Processing...' : paymentMethod === 'prepaid' ? `Pay ₹${cartData.total?.toLocaleString()}` : `Place COD Order`}
+                {submitting ? 'Processing...' : paymentMethod === 'prepaid' ? `Pay ₹${cartData.total?.toLocaleString()}` : (partialCodEnabled && partialAdvance > 0 ? `Pay ₹${Math.min(partialAdvance, cartData.total || partialAdvance)} Advance · Rest on Delivery` : `Place COD Order`)}
               </button>
 
               {/* Delivery Timeline — Instant Delivery orders get their ETA from CheckoutMap,

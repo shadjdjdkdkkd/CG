@@ -183,6 +183,22 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   batch straight from the history panel (not just the live progress bar). Cancels via the
   same durable endpoint (sets job to terminal `cancelled`). Verified via curl, zero AI calls.
 
+## 2026-07 — Bulk cancel + duplicate-guard + Partial COD (free checks only, no AI calls)
+
+- **Bulk cancel now actually stops the run**: cancel hard-stops the in-memory worker task
+  (not just the between-item flag), marks the job `cancelled` (terminal), and a Cancel button
+  is on every running/queued job in Bulk History. Verified: task cancels immediately.
+- **Stuck "running" jobs no longer burn credits**: on restart, resume now SKIPS jobs the admin
+  cancelled/flagged (previously a resume could restart a cancelled batch and re-spend credits).
+  Also added a per-process duplicate-worker guard so one job can't start twice.
+- **Duplicate products skipped BEFORE any AI prompt**: bulk-generate now re-checks each row
+  against the catalog (slug/name) right before generation, plus dedupes repeats in the paste.
+  Verified: pasting an existing product skips it with zero AI calls.
+- **Partial COD mode**: new admin toggle. When ON, COD orders collect ₹100 online (Razorpay)
+  and the balance on delivery; orders show "Partial COD (₹100 paid online)" and the label
+  balance subtracts the advance. Prepaid-only still forces full online payment when enabled.
+  Toggle round-trip verified; full order path compiles (free checks only).
+
 ### Honest constraint (chrome-extension full merge)
 The repo is a STANDALONE full-stack app (its own 1155-line FastAPI /api backend + a separate CRA
 dashboard using @/ path aliases). It cannot be merged in-place into the live Celesta store because

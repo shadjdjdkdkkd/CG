@@ -395,9 +395,11 @@ async def create_order(order_input: OrderCreate, request: Request):
     # When the admin enables "prepaid only" on the dashboard, Cash-on-Delivery
     # is disabled store-wide and only prepaid orders are accepted.
     if (order_input.payment_method or "").upper() == "COD":
-        _s = await db.site_settings.find_one({"_id": "main"}, {"_id": 0, "prepaid_only": 1})
+        _s = await db.site_settings.find_one({"_id": "main"}, {"_id": 0, "prepaid_only": 1, "partial_cod_enabled": 1, "cod_advance_amount": 1})
         if _s and _s.get("prepaid_only"):
             raise HTTPException(status_code=400, detail="Cash on Delivery is currently unavailable. Please pay online to place your order.")
+    else:
+        _s = await db.site_settings.find_one({"_id": "main"}, {"_id": 0, "prepaid_only": 1, "partial_cod_enabled": 1, "cod_advance_amount": 1})
     # ===== STOCK VALIDATION + DECREMENT =====
     # Build a list of (slug, qty, shade_id) tuples from incoming items + combo (combos decrement underlying products too)
     stock_changes = []  # list of (slug, qty, shade_id_or_None)
@@ -519,12 +521,14 @@ async def create_order(order_input: OrderCreate, request: Request):
     order_input.gift_card_discount = server_gift_card_discount
 
     order_obj = Order(**order_input.model_dump())
-    
-    if order_obj.payment_method == "COD":
-        order_obj.delivery_timeline = "5-7 Business Days"
+
+    # Partial COD: collect the advance online now, balance on delivery.
+    _adv = float(getattr(order_input, "advance_paid", 0) or 0)
+    _pc_on = bool(_s and _s.get("partial_cod_enabled"))
+    if order_obj.payment_method == "COD" and _pc_on and _adv > 0:
+        order_obj.payment_method = f"Partial COD (₹{int(_adv)} paid online)"
     else:
-        order_obj.delivery_timeline = "Fast Delivery (2-3 Days)"
-    
+        order_obj.delivery_timeline = "5-7 Business Days" if order_obj.payment_method == "COD" else "Fast Delivery (2-3 Days)"
     doc = order_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     
@@ -913,6 +917,9 @@ async def update_order_status(order_id: str, status_update: OrderStatusUpdate):
                 # phantom "COD advance"), which made the collectable show
                 # up ~₹50 less than what the customer actually owes.
                 is_cod = "COD" in (order.get("payment_method") or "")
+                # Partial COD: collect only the balance on delivery (advance already paid online).
+                _adv = float(order.get("advance_paid") or 0)
+                _bal = max(0.0, float(order.get("amount") or 0) - _adv) if is_cod else 0
                 order_for_delhivery = {
                     "order_id": order.get("order_id"),
                     "name": order.get("name"),
@@ -923,7 +930,7 @@ async def update_order_status(order_id: str, status_update: OrderStatusUpdate):
                     "city": order.get("city", ""),
                     "state": order.get("state", ""),
                     "payment_method": "cod" if is_cod else "prepaid",
-                    "cod_balance": order.get("amount", 0) if is_cod else 0,
+                    "cod_balance": _bal,
                     "total_amount": order.get("amount", 0)
                 }
                 delhivery_result = await delhivery_service.create_shipment(order_for_delhivery)
