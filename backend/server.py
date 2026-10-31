@@ -196,7 +196,19 @@ async def send_order_confirmation_email(order: Order, referral_data: dict = None
         business_email_raw = os.environ.get("BUSINESS_EMAIL") or os.environ.get("SMTP_USER") or ""
         business_recipients = [e.strip() for e in business_email_raw.split(",") if e.strip()]
         full_address = f"{order.house_number}, {order.area}, {order.state} - {order.pincode}"
-        items_list = ", ".join(f"{it.name} ×{it.quantity}" for it in (order.items or []))
+        def _it_label(it):
+            if hasattr(it, "name"):
+                return f"{it.name} ×{getattr(it, 'quantity', 1)}"
+            if isinstance(it, dict):
+                return f"{it.get('name') or it.get('slug') or 'item'} ×{it.get('quantity', 1)}"
+            return str(it)
+        def _it_label(it):
+            if hasattr(it, "name"):
+                return f"{it.name} ×{getattr(it, 'quantity', 1)}"
+            if isinstance(it, dict):
+                return f"{it.get('name') or it.get('slug') or 'item'} ×{it.get('quantity', 1)}"
+            return str(it)
+        items_list = ", ".join(_it_label(it) for it in (order.items or []))
 
         # ---- Customer email ----
         referral_block_html = ""

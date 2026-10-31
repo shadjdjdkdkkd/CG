@@ -57,5 +57,7 @@ See /app/memory/test_credentials.md (admin password celestaglow2024).
 - Partial COD admin toggle (`site_settings.partial_cod_enabled`): COD collects ₹100 online, balance on delivery; order shows "Partial COD (₹100 paid online)" and label balance reflects the advance.
 - Bulk generator: cancel + history UI, durable resume, no refresh loop. Verified with zero AI calls.
 - Bulk cancel now hard-stops the running task; restart skips cancelled jobs (no credit burn).
-- Bulk duplicate-guard: skips already-existing products before any AI prompt.
+- Bulk duplicate-guard: skips already-existing products before any AI prompt (fixed the
+  restart loop that re-ran the same products and burned credits).
+- Order emails: fixed a crash on dict items; order creation returns 200.
 - Shop page: products grouped under concern titles; only concerns with tagged products show.

@@ -2273,22 +2273,6 @@ async def _bulk_generate_worker(job_id: str, body: "BulkGenerateRequest", items:
                 await save_job(_db, job)
             except Exception:
                 pass
-            # Recheck for duplicates RIGHT BEFORE the AI prompt so a resumed /
-            # re-run batch never spends credits on a product that already exists.
-            try:
-                _s = _slugify(it.name)
-                _dup = await _db.products.find_one({"$or": [{"slug": _s}, {"name": (it.name or "").strip()}]}, {"_id": 1, "slug": 1})
-                if _dup:
-                    job["errors"].append({"name": it.name, "error": "already exists — skipped"})
-                    job["failed"] += 1
-                    job["next_index"] = idx + 1
-                    try:
-                        await save_job(_db, job)
-                    except Exception:
-                        pass
-                    continue
-            except Exception:
-                pass
             try:
                 req = OneClickProductRequest(
                     name=it.name, brand=body.brand or "Celesta Glow",
@@ -2365,7 +2349,7 @@ async def resume_interrupted_bulk_jobs():
     if _db is None:
         return
     try:
-        cursor = _db.ai_jobs.find({"kind": "bulk_gen", "status": {"$in": ["running", "cancelling"]}}, {"_id": 0})
+        cursor = _db.ai_jobs.find({"kind": "bulk_gen", "status": "running"}, {"_id": 0})
         docs = await cursor.to_list(length=50)
     except Exception as e:
         logger.warning(f"[bulk-gen] resume scan failed: {e}")
@@ -2375,13 +2359,11 @@ async def resume_interrupted_bulk_jobs():
         if not job_id:
             continue
         try:
-            # Never resume a job the admin cancelled or flagged for cancel — that
-            # is what kept burning AI credits after a deploy/restart.
             if doc.get("cancel_requested"):
                 await _db.ai_jobs.update_one({"job_id": job_id}, {"$set": {"status": "cancelled", "step": "done"}})
                 continue
             if job_id in _bulk_gen_running and not _bulk_gen_running[job_id].done():
-                continue  # already running on this process
+                continue
             items = [BulkGenItem(**it) for it in (doc.get("items") or [])]
             if not items:
                 continue

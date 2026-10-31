@@ -199,6 +199,18 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
   balance subtracts the advance. Prepaid-only still forces full online payment when enabled.
   Toggle round-trip verified; full order path compiles (free checks only).
 
+## 2026-07 — Bulk credit-drain + order-email fixes (free checks only)
+
+- **Bulk no longer loops / re-runs the same products**: removed the per-item duplicate
+  re-check that advanced `next_index` and skipped already-created products (that was the
+  "goes back to step 1" + repeated-generation bug). Skips now happen ONLY once at submit
+  time — a product already in the catalog is skipped before any AI call.
+- **Order emails fixed**: the order-confirmation email crashed when items were dicts
+  (`'dict' object has no attribute 'name'`). Now renders item names safely; order creation
+  returns 200 (no more 500s).
+- Verified with free checks only (no AI calls, no paid testing run): order 200 OK, bulk
+  duplicate-guard skips existing products with 0 AI spend.
+
 ### Honest constraint (chrome-extension full merge)
 The repo is a STANDALONE full-stack app (its own 1155-line FastAPI /api backend + a separate CRA
 dashboard using @/ path aliases). It cannot be merged in-place into the live Celesta store because
