@@ -2074,6 +2074,41 @@ async def bulk_generate_products(
     items = [it for it in (body.items or []) if (it.name or "").strip()]
     if not items:
         raise HTTPException(status_code=400, detail="No valid product rows provided")
+
+    # ---- DEDUPE: skip rows already in the catalog (by slug or exact name) and
+    # drop repeats within the pasted list. Prevents re-generating existing
+    # products (wasted AI credits) when a name is pasted twice / re-run. ----
+    seen_keys = set()
+    skipped = []
+    kept = []
+    for it in items:
+        nm = (it.name or "").strip()
+        slug = _slugify(nm)
+        key = slug or nm.lower()
+        if key in seen_keys:
+            skipped.append({"name": nm, "slug": slug, "error": "duplicate in list"})
+            continue
+        seen_keys.add(key)
+        exists = await _db.products.find_one({"$or": [{"slug": slug}, {"name": nm}]}, {"_id": 1, "slug": 1})
+        if exists:
+            skipped.append({"name": nm, "slug": exists.get("slug") or slug, "error": "already exists"})
+            continue
+        kept.append(it)
+    items = kept
+    if not items:
+        # Everything was already there — return a finished job so the UI shows it.
+        job_id = f"bulk_{uuid.uuid4().hex[:10]}"
+        _bulk_gen_jobs[job_id] = {
+            "job_id": job_id, "kind": "bulk_gen", "status": "done", "total": 0,
+            "done": 0, "failed": 0, "current": None, "step": "done",
+            "created": [], "errors": skipped,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "items": [], "brand": body.brand or "Celesta Glow",
+            "generate_image": bool(body.generate_image), "next_index": 0,
+        }
+        return {"success": True, "job_id": job_id, "total": 0, "status": "done",
+                "skipped": len(skipped), "detail": "All rows already exist — nothing to generate."}
     if not os.environ.get("GEMINI_API_KEY"):
         # The copy step (services.llm_helper.llm_text) uses GEMINI_API_KEY only.
         raise HTTPException(status_code=503, detail="No AI key configured (set GEMINI_API_KEY)")
@@ -2091,6 +2126,7 @@ async def bulk_generate_products(
         "brand": body.brand or "Celesta Glow",
         "generate_image": bool(body.generate_image),
         "next_index": 0,
+        "skipped": skipped,
     }
     _launch_bulk_worker(job_id, body, items, 0)
     return {"success": True, "job_id": job_id, "total": len(items), "status": "running"}
@@ -2167,7 +2203,7 @@ async def bulk_generate_history(
             "pending": max(0, total - done - failed),
             "current": d.get("current"),
             "created": d.get("created") or [],
-            "errors": d.get("errors") or [],
+            "errors": (d.get("errors") or []) + (d.get("skipped") or []),
             "created_at": d.get("created_at"),
             "finished_at": d.get("finished_at"),
         })

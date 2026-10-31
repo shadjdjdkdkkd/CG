@@ -194,6 +194,22 @@ function ShopPage() {
     return list;
   }, [products, filter, sortBy, skinType, ingredient, look, minPrice, maxPrice, minRating]);
 
+  // Group visible products under their concern titles. Only concerns that at
+  // least one product is tagged with get a section (a product can appear under
+  // more than one concern — that's intended).
+  const groupedByConcern = useMemo(() => {
+    const groups = {};
+    const title = (c) => (c || '').replace(/[-_]/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+    visibleProducts.forEach((p) => {
+      const cs = (p.concerns || []).filter(Boolean);
+      if (!cs.length) { (groups['__other'] = groups.__other || []).push(p); return; }
+      cs.forEach((c) => { (groups[c] = groups[c] || []).push(p); });
+    });
+    return Object.entries(groups)
+      .map(([key, prods]) => ({ key, title: key === '__other' ? 'More Products' : title(key), prods }))
+      .sort((a, b) => b.prods.length - a.prods.length || a.title.localeCompare(b.title));
+  }, [visibleProducts]);
+
   const activeFilters = useMemo(() => {
     const out = [];
     if (filter !== 'all') out.push({ key: 'filter', label: filter, raw: filter });
@@ -561,7 +577,7 @@ function ShopPage() {
           )}
         </div>
 
-        {/* PRODUCT GRID */}
+        {/* PRODUCT GRID — grouped under each concern title */}
         {visibleProducts.length === 0 ? (
           <div className="bg-white border border-green-100 rounded-2xl p-10 text-center text-sm text-gray-500">
             {debouncedSearch
@@ -570,11 +586,19 @@ function ShopPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 mb-6">
-              {visibleProducts.map((product, i) => (
-                <ProductCard key={product.slug} product={product} priority={i < 4} />
-              ))}
-            </div>
+            {groupedByConcern.map((g, gi) => (
+              <section key={g.key} className="mb-10" data-testid={`concern-group-${g.key}`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <h3 className="font-heading text-xl sm:text-2xl font-black text-gray-900">{g.title}</h3>
+                  <span className="text-[11px] font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full ring-1 ring-green-100">{g.prods.length}</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5">
+                  {g.prods.map((product, i) => (
+                    <ProductCard key={`${g.key}-${product.slug}`} product={product} priority={gi === 0 && i < 4} />
+                  ))}
+                </div>
+              </section>
+            ))}
             {hasMore && (
               <>
                 {/* Sentinel for infinite scroll — auto-loads next page as user scrolls */}

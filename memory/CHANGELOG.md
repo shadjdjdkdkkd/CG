@@ -171,6 +171,14 @@ Re-cloned github.com/dragon16t/celare-1.4 into /app; matches reference celare-pr
 - Bulk generator: **Cancel Generation** button confirmed in admin UI; cancel endpoint sets the
   job to terminal `cancelled` (verified via curl, zero AI calls). Bulk History modal present.
 
+- Shop page: products are now grouped under concern titles (e.g. "Aging", "Sun Protection",
+  "Dryness"). Only concerns that have at least one tagged product appear; new AI-created
+  products auto-file under their concern (and the concern auto-creates if new). Verified
+  8 concern groups render on /shop with product cards beneath each.
+- Bulk generator: skips rows whose product already exists (by slug or exact name) and drops
+  duplicates within the pasted list, so no credits are spent re-generating them. Skipped
+  items appear in Bulk History. Verified via curl (existing product skipped, no AI call).
+
 ### Honest constraint (chrome-extension full merge)
 The repo is a STANDALONE full-stack app (its own 1155-line FastAPI /api backend + a separate CRA
 dashboard using @/ path aliases). It cannot be merged in-place into the live Celesta store because

@@ -55,3 +55,5 @@ See /app/memory/test_credentials.md (admin password celestaglow2024).
 - Concern/Category back link → returns to that range's shop home (`/shop?niche=skincare` or `/shop?niche=cosmetics`).
 - Prepaid-only admin toggle (`site_settings.prepaid_only`): hides COD at checkout and rejects COD orders (400) store-wide when ON.
 - Bulk generator: cancel + history UI, durable resume, no refresh loop. Verified with zero AI calls.
+- Shop page: products grouped under concern titles; only concerns with tagged products show.
+- Bulk generator: skips already-existing / duplicate products before generation (no wasted credits).
