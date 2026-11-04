@@ -3738,6 +3738,16 @@ async def startup_seed():
     except Exception as e:
         logging.error(f"Failed to refresh admin pw cache: {e}")
 
+    # Fast: re-apply the admin-saved Gemini key override so an updated key
+    # survives every backend restart/redeploy (one Mongo doc lookup).
+    try:
+        _ks = await db.site_settings.find_one({"_id": "main"}, {"_id": 0, "gemini_api_key_override": 1})
+        if _ks and _ks.get("gemini_api_key_override"):
+            os.environ["GEMINI_API_KEY"] = _ks["gemini_api_key_override"]
+            logging.info("[startup] applied admin-saved Gemini API key override")
+    except Exception as e:
+        logging.warning(f"Failed to apply saved Gemini key override: {e}")
+
     # Fast: hydrate active-admin-hash cache used by every admin verifier
     try:
         from services.admin_auth import refresh_active_admin_hash

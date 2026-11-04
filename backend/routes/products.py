@@ -2314,7 +2314,6 @@ async def get_site_settings():
     settings = await db.site_settings.find_one({"_id": "main"}, {"_id": 0})
     return settings or {}
 
-
 @router.put("/admin/site-settings")
 async def update_site_settings(
     data: SiteSettingsUpdate,
@@ -2325,6 +2324,68 @@ async def update_site_settings(
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.site_settings.update_one({"_id": "main"}, {"$set": update}, upsert=True)
     return {"success": True}
+
+
+# ==================== AI GENERATION KEY (Gemini) ====================
+# Admin can update the Gemini key from Settings without a redeploy. The saved
+# override lives in site_settings and is applied to the running process
+# immediately, then re-applied on every backend startup.
+
+
+class AiKeyUpdate(BaseModel):
+    gemini_api_key: str
+
+
+def _mask_key(k: str) -> str:
+    k = (k or "").strip()
+    return (k[:4] + "…" + k[-4:]) if len(k) > 10 else ("set" if k else "")
+
+
+@router.get("/admin/ai-key")
+async def get_ai_key(x_admin_token: str = Header(None, alias="X-Admin-Token")):
+    """Show which Gemini key AI generation is using (masked) + where it came from."""
+    verify_auth(x_admin_token=x_admin_token)
+    doc = await db.site_settings.find_one({"_id": "main"}, {"_id": 0, "gemini_api_key_override": 1, "auto_product_gen_enabled": 1})
+    override = (doc or {}).get("gemini_api_key_override") or ""
+    active = override or os.environ.get("GEMINI_API_KEY", "")
+    return {
+        "configured": bool(active),
+        "masked": _mask_key(active),
+        "source": "saved" if override else ("environment" if active else "none"),
+        "auto_product_gen_enabled": (doc or {}).get("auto_product_gen_enabled", True),
+    }
+
+
+@router.put("/admin/ai-key")
+async def update_ai_key(body: AiKeyUpdate, x_admin_token: str = Header(None, alias="X-Admin-Token")):
+    """Save a new Gemini API key: persists to DB + applies to this process now."""
+    verify_auth(x_admin_token=x_admin_token)
+    key = (body.gemini_api_key or "").strip()
+    if len(key) < 20:
+        raise HTTPException(status_code=400, detail="That doesn't look like a valid API key.")
+    await db.site_settings.update_one(
+        {"_id": "main"},
+        {"$set": {"gemini_api_key_override": key, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    os.environ["GEMINI_API_KEY"] = key  # all AI features read this at call time
+    return {"success": True, "masked": _mask_key(key)}
+
+
+@router.put("/admin/ai-key/auto-gen")
+async def toggle_auto_product_gen(
+    body: Dict[str, Any] = Body(...),
+    x_admin_token: str = Header(None, alias="X-Admin-Token"),
+):
+    """Enable/disable the daily automatic product generation cron."""
+    verify_auth(x_admin_token=x_admin_token)
+    enabled = bool(body.get("enabled", True))
+    await db.site_settings.update_one(
+        {"_id": "main"},
+        {"$set": {"auto_product_gen_enabled": enabled, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        upsert=True,
+    )
+    return {"success": True, "auto_product_gen_enabled": enabled}
 
 
 # ==================== CUSTOMER RETENTION ====================

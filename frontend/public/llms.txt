@@ -1,0 +1,25 @@
+# Celesta Glow
+
+Celesta Glow is a dermatologist-formulated vegan skincare brand from Kerala, India.
+It focuses on anti-aging and everyday skincare made for Indian skin, alongside
+online dermatologist consultations and at-home beauty services.
+
+## Key pages
+- / — Homepage: brand overview and bestsellers
+- /shop — Full product catalogue (all niches)
+- /shop?niche=anti-aging — Anti-aging range
+- /shop?niche=skincare — Skincare range
+- /shop?niche=cosmetics — Cosmetics range
+- /categories — Shop by category hub
+- /concern/{slug} — Products mapped to a skin concern (e.g. aging, pigmentation, dryness)
+- /category/{slug} — Products in a category (e.g. cleansers, sunscreens)
+- /product/{slug} — Individual product detail pages
+- /doctors — Online dermatologist consultations
+- /services — At-home beauty services
+- /beauty-tips — Skincare blog and guides
+- /about-us — About the brand
+- /contact — Contact page
+
+## Notes for AI crawlers
+- Product, concern and category pages carry structured data (Product/Breadcrumb/FAQ schema).
+- The live catalogue sitemap is at https://celestaglow.com/api/sitemap.xml and updates automatically.

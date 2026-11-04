@@ -10,7 +10,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Cloud, Save, KeyRound, CheckCircle2, AlertCircle, Eye, EyeOff, Package, Image as ImageIcon, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Cloud, Save, KeyRound, CheckCircle2, AlertCircle, Eye, EyeOff, Package, Image as ImageIcon, Upload, Loader2, Sparkles, Pencil } from 'lucide-react';
 import { getAdminToken, clearAdminToken } from '../../utils/adminAuth';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -38,6 +38,46 @@ export default function AdminSettings() {
   const [refUploading, setRefUploading] = useState(''); // 'serum' | 'cream' | ''
   const [refMsg, setRefMsg] = useState({ type: '', text: '' });
 
+  // AI generation (Gemini) key state — masked display, edit → save
+  const [aiKey, setAiKey] = useState({ masked: '', source: 'none', configured: false, autoGen: true });
+  const [aiEditing, setAiEditing] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiMsg, setAiMsg] = useState({ type: '', text: '' });
+
+  const loadAiKey = async () => {
+    try {
+      const r = await axios.get(`${API}/admin/ai-key`, { headers: { 'X-Admin-Token': token } });
+      setAiKey({ masked: r.data.masked || '', source: r.data.source || 'none', configured: !!r.data.configured, autoGen: r.data.auto_product_gen_enabled !== false });
+    } catch { /* ignore */ }
+  };
+
+  const saveAiKey = async (e) => {
+    e.preventDefault();
+    if (!aiInput.trim()) { setAiMsg({ type: 'err', text: 'Paste the new API key first.' }); return; }
+    setAiSaving(true);
+    setAiMsg({ type: '', text: '' });
+    try {
+      await axios.put(`${API}/admin/ai-key`, { gemini_api_key: aiInput.trim() }, { headers: { 'X-Admin-Token': token } });
+      setAiMsg({ type: 'ok', text: 'AI key updated — all generation now uses the new key.' });
+      setAiInput('');
+      setAiEditing(false);
+      loadAiKey();
+    } catch (err) {
+      setAiMsg({ type: 'err', text: err.response?.data?.detail || 'Failed to save the key.' });
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const toggleAutoGen = async () => {
+    const next = !aiKey.autoGen;
+    setAiKey(k => ({ ...k, autoGen: next }));
+    try {
+      await axios.put(`${API}/admin/ai-key/auto-gen`, { enabled: next }, { headers: { 'X-Admin-Token': token } });
+    } catch { setAiKey(k => ({ ...k, autoGen: !next })); }
+  };
+
   useEffect(() => {
     if (!token) {
       navigate('/admin');
@@ -56,6 +96,7 @@ export default function AdminSettings() {
       } catch {
         // ignore
       }
+      loadAiKey();
       try {
         const s = await axios.get(`${API}/site-settings`);
         setOtherBrands(!!s.data?.other_brands_in_stock);
@@ -243,6 +284,75 @@ export default function AdminSettings() {
               <Save size={14} /> {cdnSaving ? 'Saving…' : 'Save Cloudinary credentials'}
             </button>
           </form>
+        </section>
+
+        {/* AI generation (Gemini) API key */}
+        <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-6" data-testid="ai-key-section">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-9 h-9 rounded-lg bg-indigo-50 flex items-center justify-center"><Sparkles size={18} className="text-indigo-600" /></div>
+            <div className="flex-1">
+              <h2 className="text-lg font-bold text-gray-900">AI generation key (Gemini)</h2>
+              <p className="text-xs text-gray-500">Powers bulk product generation, one-click products, AI images and listing copy.</p>
+            </div>
+            {aiKey.configured ? (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-50 px-2.5 py-1 rounded-full"><CheckCircle2 size={12} /> Active</span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 px-2.5 py-1 rounded-full"><AlertCircle size={12} /> Missing</span>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl bg-stone-50 border border-stone-200 px-4 py-3 mb-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900 font-mono truncate" data-testid="ai-key-current">
+                {aiKey.configured ? aiKey.masked : 'No key set'}
+              </p>
+              <p className="text-[11px] text-gray-400">Source: {aiKey.source === 'saved' ? 'saved here (survives redeploys)' : aiKey.source === 'environment' ? 'server environment' : 'none'}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setAiEditing(e => !e); setAiInput(''); setAiMsg({ type: '', text: '' }); }}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 rounded-lg shrink-0 ml-3"
+              data-testid="ai-key-edit"
+            >
+              <Pencil size={12} /> {aiEditing ? 'Close' : 'Edit'}
+            </button>
+          </div>
+
+          {aiEditing && (
+            <form onSubmit={saveAiKey} className="space-y-3">
+              <input
+                type="password"
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                placeholder="Paste new Gemini API key"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-stone-50 focus:bg-white focus:ring-2 focus:ring-indigo-200 font-mono"
+                data-testid="ai-key-input"
+              />
+              {aiMsg.text && (
+                <div className={`px-3 py-2 rounded-lg text-xs ${aiMsg.type === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`} data-testid="ai-key-msg">
+                  {aiMsg.text}
+                </div>
+              )}
+              <button type="submit" disabled={aiSaving} className="inline-flex items-center gap-2 bg-indigo-600 text-white text-sm font-bold px-4 py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-50" data-testid="ai-key-save">
+                <Save size={14} /> {aiSaving ? 'Saving…' : 'Save new key'}
+              </button>
+            </form>
+          )}
+
+          <div className="flex items-center justify-between rounded-xl bg-stone-50 border border-stone-200 px-4 py-3 mt-4">
+            <div>
+              <p className="text-sm font-bold text-gray-900">Daily auto product generation</p>
+              <p className="text-[11px] text-gray-400">Adds ~5 new cream-style SKUs every day (₹599–₹899), skipping anything that already exists.</p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleAutoGen}
+              className={`relative w-12 h-7 rounded-full transition-colors flex-shrink-0 ml-3 ${aiKey.autoGen ? 'bg-emerald-500' : 'bg-stone-300'}`}
+              data-testid="auto-gen-toggle"
+            >
+              <span className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform ${aiKey.autoGen ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
         </section>
 
         {/* Storefront: Other Brands availability */}

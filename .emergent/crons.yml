@@ -1,0 +1,9 @@
+crons:
+  - name: daily-product-gen
+    description: "Adds ~5 new cream-style SKUs daily via AI, skipping duplicates, priced 599-899"
+    cron: "0 6 * * *"
+    timezone: "Asia/Kolkata"
+    endpoint: "{{BASE_URL}}/api/cron/daily-product-gen"
+    method: POST
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    enabled: true
